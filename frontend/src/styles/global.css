@@ -1,0 +1,308 @@
+:root {
+  --cor-primaria: #7c3aed;
+  --cor-primaria-escura: #6d28d9;
+  --cor-fundo: #f6f5fb;
+  --cor-superficie: #ffffff;
+  --cor-borda: #e6e4f0;
+  --cor-texto: #1f1b2e;
+  --cor-texto-suave: #6b6580;
+  --cor-sucesso: #16a34a;
+  --cor-erro: #dc2626;
+  --cor-aviso: #d97706;
+  --raio: 12px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--cor-fundo);
+  color: var(--cor-texto);
+}
+
+/* ---------- Layout com sidebar ---------- */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--cor-superficie);
+  border-right: 1px solid var(--cor-borda);
+  display: flex;
+  flex-direction: column;
+  padding: 24px 16px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.logo-salao {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 20px;
+  padding: 0 8px;
+}
+
+.sidebar-usuario {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  margin-bottom: 12px;
+  border-radius: var(--raio);
+  background: var(--cor-fundo);
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--cor-primaria);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.sidebar-usuario-nome { font-weight: 600; font-size: 0.9rem; }
+.sidebar-usuario-papel { font-size: 0.75rem; color: var(--cor-texto-suave); }
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  flex: 1;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--raio);
+  color: var(--cor-texto-suave);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.92rem;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-link:hover { background: var(--cor-fundo); color: var(--cor-texto); }
+.sidebar-link.ativo { background: var(--cor-primaria); color: white; }
+
+.sidebar-sair {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--raio);
+  border: none;
+  background: transparent;
+  color: var(--cor-erro);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+.sidebar-sair:hover { background: #fee2e2; }
+
+.conteudo {
+  flex: 1;
+  padding: 32px 40px;
+  max-width: 960px;
+}
+
+/* ---------- Página / headers ---------- */
+.pagina-header { margin-bottom: 24px; }
+.pagina-header h1 { margin: 0 0 4px; font-size: 1.5rem; }
+.pagina-header p { margin: 0; color: var(--cor-texto-suave); }
+
+/* ---------- Auth ---------- */
+.tela-auth {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%);
+  padding: 20px;
+}
+
+.card-auth {
+  background: var(--cor-superficie);
+  border-radius: 16px;
+  padding: 32px;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+}
+
+.card-auth h1 { margin: 0; font-size: 1.4rem; }
+.subtitulo { margin: 0 0 6px; color: var(--cor-texto-suave); font-size: 0.9rem; }
+
+.card-auth label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--cor-texto-suave);
+}
+
+input, select {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--cor-borda);
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+input:focus, select:focus { outline: 2px solid var(--cor-primaria); border-color: transparent; }
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 16px;
+  background: var(--cor-primaria);
+  color: white;
+  font-weight: 600;
+  font-size: 0.92rem;
+  transition: background 0.15s;
+}
+button:hover { background: var(--cor-primaria-escura); }
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.botao-secundario {
+  background: var(--cor-fundo);
+  color: var(--cor-texto);
+  border: 1px solid var(--cor-borda);
+}
+.botao-secundario:hover { background: #ece9f7; }
+
+.botao-pequeno { padding: 6px 10px; font-size: 0.8rem; }
+.botao-perigo { background: #fee2e2; color: var(--cor-erro); }
+.botao-perigo:hover { background: #fecaca; }
+
+.link-secundario { text-align: center; font-size: 0.85rem; color: var(--cor-texto-suave); margin: 0; }
+.link-secundario a { color: var(--cor-primaria); font-weight: 600; text-decoration: none; }
+
+/* ---------- Alertas ---------- */
+.alerta-erro, .alerta-sucesso, .aviso-vazio {
+  padding: 12px 14px;
+  border-radius: var(--raio);
+  font-size: 0.88rem;
+  margin-bottom: 16px;
+}
+.alerta-erro { background: #fee2e2; color: var(--cor-erro); }
+.alerta-sucesso { background: #dcfce7; color: var(--cor-sucesso); }
+.aviso-vazio { background: var(--cor-superficie); border: 1px dashed var(--cor-borda); color: var(--cor-texto-suave); }
+
+/* ---------- Seletor de data ---------- */
+.seletor-data { margin-bottom: 20px; }
+.seletor-data label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 0.85rem; color: var(--cor-texto-suave); width: fit-content; }
+
+/* ---------- Grade de horários (cliente) ---------- */
+.grade-horarios {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.chip-horario {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  color: var(--cor-texto);
+  padding: 12px 8px;
+  border-radius: var(--raio);
+  font-weight: 600;
+}
+.chip-horario:hover:not(:disabled) { border-color: var(--cor-primaria); }
+.chip-horario.selecionado { background: var(--cor-primaria); color: white; border-color: var(--cor-primaria); }
+.chip-horario.ocupado { background: #f1f0f6; color: #b4afc4; cursor: not-allowed; }
+.chip-horario.minha-reserva { background: #ede9fe; border-color: var(--cor-primaria); color: var(--cor-primaria-escura); }
+
+.painel-confirmacao {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+}
+.painel-confirmacao label { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; font-weight: 600; color: var(--cor-texto-suave); }
+.painel-confirmacao-botoes { display: flex; gap: 10px; }
+
+/* ---------- Minhas reservas ---------- */
+.lista-reservas { display: flex; flex-direction: column; gap: 10px; }
+.card-reserva {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-reserva-data { font-weight: 700; }
+.card-reserva-servico { color: var(--cor-texto-suave); font-size: 0.85rem; }
+
+/* ---------- Gestor ---------- */
+.card-abrir-agenda {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 18px 20px;
+  margin-bottom: 24px;
+}
+.card-abrir-agenda h3 { margin-top: 0; }
+.linha-form { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.linha-form label { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; font-weight: 600; color: var(--cor-texto-suave); }
+.linha-form-botoes { display: flex; gap: 10px; }
+
+.lista-slots-gestor { display: flex; flex-direction: column; gap: 8px; }
+.linha-slot {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.linha-slot.status-reservado { border-left: 4px solid var(--cor-primaria); }
+.linha-slot.status-bloqueado { border-left: 4px solid var(--cor-texto-suave); opacity: 0.75; }
+.linha-slot.status-disponivel { border-left: 4px solid var(--cor-sucesso); }
+
+.linha-slot-info { display: flex; align-items: center; gap: 12px; }
+.linha-slot-horario { font-weight: 700; min-width: 52px; }
+.linha-slot-cliente { color: var(--cor-texto-suave); font-size: 0.85rem; }
+
+.badge { font-size: 0.72rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; }
+.badge-disponivel { background: #dcfce7; color: var(--cor-sucesso); }
+.badge-reservado { background: #ede9fe; color: var(--cor-primaria-escura); }
+.badge-bloqueado { background: #f1f0f6; color: var(--cor-texto-suave); }
+
+.linha-slot-acoes { display: flex; gap: 8px; }
+
+.tela-carregando { display: flex; align-items: center; justify-content: center; height: 100vh; color: var(--cor-texto-suave); }
+
+@media (max-width: 720px) {
+  .app-shell { flex-direction: column; }
+  .sidebar { width: 100%; height: auto; position: relative; flex-direction: row; align-items: center; overflow-x: auto; }
+  .sidebar-topo { display: flex; align-items: center; gap: 16px; }
+  .sidebar-nav { flex-direction: row; margin-top: 0; }
+  .conteudo { padding: 20px; }
+}
