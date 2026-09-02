@@ -60,6 +60,7 @@ export default function Sidebar() {
             to={item.to}
             end={item.to === '/'}
             className={({ isActive }) => 'sidebar-link' + (isActive ? ' ativo' : '')}
+            aria-label={item.label}
           >
             {item.icon}
             <span>{item.label}</span>
@@ -67,7 +68,7 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <button className="sidebar-sair" onClick={logout}>
+      <button className="sidebar-sair" onClick={logout} aria-label="Sair" title="Sair">
         {iconeSair}
         <span>Sair</span>
       </button>

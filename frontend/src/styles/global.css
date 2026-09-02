@@ -19,6 +19,7 @@ body {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   background: var(--cor-fundo);
   color: var(--cor-texto);
+  min-width: 320px;
 }
 
 /* ---------- Layout com sidebar ---------- */
@@ -116,6 +117,7 @@ body {
   flex: 1;
   padding: 32px 40px;
   max-width: 960px;
+  width: 100%;
 }
 
 /* ---------- Página / headers ---------- */
@@ -163,6 +165,7 @@ input, select {
   border: 1px solid var(--cor-borda);
   font-size: 0.95rem;
   font-family: inherit;
+  max-width: 100%;
 }
 input:focus, select:focus { outline: 2px solid var(--cor-primaria); border-color: transparent; }
 
@@ -301,8 +304,82 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 @media (max-width: 720px) {
   .app-shell { flex-direction: column; }
-  .sidebar { width: 100%; height: auto; position: relative; flex-direction: row; align-items: center; overflow-x: auto; }
-  .sidebar-topo { display: flex; align-items: center; gap: 16px; }
-  .sidebar-nav { flex-direction: row; margin-top: 0; }
-  .conteudo { padding: 20px; }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    position: sticky;
+    z-index: 10;
+    top: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    box-shadow: 0 2px 8px rgba(31, 27, 46, 0.06);
+  }
+
+  .sidebar-topo {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .logo-salao { margin: 0; padding: 0; }
+  .sidebar-usuario { margin: 0; padding: 6px 8px; }
+  .sidebar-nav { flex: 1; flex-direction: row; margin: 0; gap: 6px; }
+  .sidebar-link { justify-content: center; flex: 1; padding: 10px 8px; white-space: nowrap; }
+  .sidebar-sair { padding: 10px 12px; }
+
+  .conteudo { padding: 24px 20px; }
+  .pagina-header { margin-bottom: 20px; }
+  .pagina-header h1 { font-size: 1.35rem; }
+
+  .grade-horarios { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+  .chip-horario { min-height: 46px; padding: 10px 6px; }
+  .painel-confirmacao { max-width: none; padding: 16px; }
+  .painel-confirmacao-botoes > button { flex: 1; }
+
+  .card-abrir-agenda { padding: 16px; }
+  .linha-form { gap: 10px; }
+  .linha-form label { flex: 1 1 120px; }
+  .linha-form label input { width: 100%; }
+  .linha-form-botoes { flex-wrap: wrap; }
+  .linha-form-botoes button { flex: 1 1 210px; }
+
+  .linha-slot { padding: 12px; }
+  .linha-slot-info { flex-wrap: wrap; }
+  .linha-slot-cliente { flex-basis: 100%; }
+  .linha-slot-acoes { width: 100%; flex-wrap: wrap; }
+  .linha-slot-acoes button { flex: 1 1 130px; min-height: 42px; }
+
+  .card-reserva { align-items: flex-start; gap: 12px; }
+  .card-reserva button { flex-shrink: 0; }
+}
+
+@media (max-width: 420px) {
+  .tela-auth { align-items: flex-start; padding: 14px; }
+  .card-auth { margin-top: 24px; padding: 24px 20px; border-radius: 14px; }
+
+  .sidebar { padding: 8px 10px; }
+  .sidebar-usuario { background: transparent; padding: 0; }
+  .sidebar-usuario > div:last-child { display: none; }
+  .sidebar-link { flex: 0 1 48px; padding: 10px; }
+  .sidebar-link span, .sidebar-sair span { display: none; }
+  .sidebar-sair { padding: 10px; }
+
+  .conteudo { padding: 18px 14px 24px; }
+  .seletor-data label, .seletor-data input { width: 100%; }
+  .grade-horarios { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .painel-confirmacao-botoes { flex-direction: column-reverse; }
+  .painel-confirmacao-botoes > button { width: 100%; }
+
+  .linha-form-botoes { flex-direction: column; }
+  .linha-form-botoes button { width: 100%; }
+  .card-reserva { flex-direction: column; }
+  .card-reserva button { width: 100%; }
 }
