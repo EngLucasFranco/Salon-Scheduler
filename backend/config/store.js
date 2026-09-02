@@ -24,7 +24,7 @@ async function sqlite() {
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           nome TEXT NOT NULL,
-          email TEXT NOT NULL UNIQUE,
+          login TEXT NOT NULL UNIQUE,
           telefone TEXT,
           senha TEXT NOT NULL,
           papel TEXT NOT NULL DEFAULT 'cliente',
@@ -37,6 +37,13 @@ async function sqlite() {
           slots TEXT NOT NULL DEFAULT '[]'
         );
       `);
+      const columns = await db.all('PRAGMA table_info(users)');
+      if (!columns.some((column) => column.name === 'login')) {
+        await db.exec('ALTER TABLE users ADD COLUMN login TEXT');
+        await db.exec("UPDATE users SET login = lower(substr(email, 1, instr(email || '@', '@') - 1)) WHERE login IS NULL");
+        await db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_login_unique ON users(login)');
+      }
+      await seedDevelopmentUsers(db);
       return db;
     });
   }
@@ -48,33 +55,46 @@ async function connectStore() {
   return sqlite();
 }
 
+async function seedDevelopmentUsers(db) {
+  const users = [
+    { nome: 'Cliente de desenvolvimento', login: '010101', senha: '000001', papel: 'cliente' },
+    { nome: 'Gestor de desenvolvimento', login: '020202', senha: '000002', papel: 'gestor' },
+  ];
+  for (const user of users) {
+    const exists = await db.get('SELECT id FROM users WHERE login = ?', user.login);
+    if (!exists) {
+      await db.run('INSERT INTO users (nome, login, telefone, senha, papel) VALUES (?, ?, ?, ?, ?)', user.nome, user.login, '', await bcrypt.hash(user.senha, 10), user.papel);
+    }
+  }
+}
+
 function safeUser(user) {
-  return { id: String(user.id), nome: user.nome, email: user.email, telefone: user.telefone || '', papel: user.papel };
+  return { id: String(user.id), nome: user.nome, login: user.login, telefone: user.telefone || '', papel: user.papel };
 }
 
 function mapMongoUser(user) {
   if (!user) return null;
-  return { id: String(user._id), nome: user.nome, email: user.email, telefone: user.telefone || '', papel: user.papel, senha: user.senha };
+  return { id: String(user._id), nome: user.nome, login: user.login, telefone: user.telefone || '', papel: user.papel, senha: user.senha };
 }
 
-async function findUserByEmail(email) {
-  if (usingMongo()) return mapMongoUser(await User.findOne({ email: email.toLowerCase() }));
+async function findUserByLogin(login) {
+  if (usingMongo()) return mapMongoUser(await User.findOne({ login: login.toLowerCase() }));
   const db = await sqlite();
-  return db.get('SELECT id, nome, email, telefone, senha, papel FROM users WHERE email = ?', email.toLowerCase());
+  return db.get('SELECT id, nome, login, telefone, senha, papel FROM users WHERE login = ?', login.toLowerCase());
 }
 
 async function findUserById(id) {
   if (usingMongo()) return mapMongoUser(await User.findById(id).select('+senha'));
   const db = await sqlite();
-  return db.get('SELECT id, nome, email, telefone, senha, papel FROM users WHERE id = ?', id);
+  return db.get('SELECT id, nome, login, telefone, senha, papel FROM users WHERE id = ?', id);
 }
 
-async function createUser({ nome, email, telefone, senha, papel }) {
-  if (usingMongo()) return mapMongoUser(await User.create({ nome, email, telefone, senha, papel }));
+async function createUser({ nome, login, telefone, senha, papel }) {
+  if (usingMongo()) return mapMongoUser(await User.create({ nome, login, telefone, senha, papel }));
   const db = await sqlite();
   const result = await db.run(
-    'INSERT INTO users (nome, email, telefone, senha, papel) VALUES (?, ?, ?, ?, ?)',
-    nome, email.toLowerCase(), telefone || '', await bcrypt.hash(senha, 10), papel
+    'INSERT INTO users (nome, login, telefone, senha, papel) VALUES (?, ?, ?, ?, ?)',
+    nome, login.toLowerCase(), telefone || '', await bcrypt.hash(senha, 10), papel
   );
   return findUserById(result.lastID);
 }
@@ -138,4 +158,4 @@ function newSlot(horario) {
   return usingMongo() ? { horario, status: 'disponivel' } : { _id: randomUUID(), horario, status: 'disponivel' };
 }
 
-module.exports = { connectStore, usingMongo, safeUser, findUserByEmail, findUserById, createUser, findAgenda, listAgendas, saveAgenda, newSlot };
+module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, findAgenda, listAgendas, saveAgenda, newSlot };

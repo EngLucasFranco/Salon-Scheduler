@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [loginUsuario, setLoginUsuario] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -15,7 +15,7 @@ export default function Login() {
     setErro('');
     setEnviando(true);
     try {
-      await login(email, senha);
+      await login(loginUsuario, senha);
       navigate('/');
     } catch (err) {
       setErro(err.response?.data?.mensagem || 'Não foi possível entrar.');
@@ -33,13 +33,13 @@ export default function Login() {
         {erro && <div className="alerta-erro">{erro}</div>}
 
         <label>
-          E-mail
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          Usuário
+          <input value={loginUsuario} onChange={(e) => setLoginUsuario(e.target.value)} minLength={6} pattern="[A-Za-z0-9]+" autoComplete="username" required />
         </label>
 
         <label>
           Senha
-          <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} required />
+          <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} minLength={6} autoComplete="current-password" required />
         </label>
 
         <button type="submit" disabled={enviando}>

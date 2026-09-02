@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 export default function Registrar() {
   const { registrar } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ nome: '', email: '', telefone: '', senha: '', codigoGestor: '' });
+  const [form, setForm] = useState({ nome: '', login: '', telefone: '', senha: '', codigoGestor: '' });
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -41,8 +41,8 @@ export default function Registrar() {
         </label>
 
         <label>
-          E-mail
-          <input type="email" value={form.email} onChange={(e) => atualizar('email', e.target.value)} required />
+          Usuário
+          <input value={form.login} onChange={(e) => atualizar('login', e.target.value)} minLength={6} pattern="[A-Za-z0-9]+" autoComplete="username" required />
         </label>
 
         <label>

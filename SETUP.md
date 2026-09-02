@@ -14,6 +14,9 @@ A interface estará em `http://localhost:5173` e a API em
 `http://localhost:5000/api`. O arquivo `frontend/.env.development` já usa
 essa URL e o backend já aceita essa origem via `CORS_ORIGIN`.
 
+No banco SQLite local, a API cria as contas de demonstração `010101` / `000001`
+(cliente) e `020202` / `000002` (gestor). Elas não são criadas no MongoDB Atlas.
+
 No Windows, a cópia do arquivo de ambiente também pode ser feita com:
 
 ```powershell

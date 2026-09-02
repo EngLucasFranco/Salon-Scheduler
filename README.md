@@ -22,4 +22,14 @@ Antes de iniciar, defina valores seguros para `JWT_SECRET` e
 `MANAGER_INVITE_CODE` em `backend/.env`. A interface abre em
 `http://localhost:5173` e a API em `http://localhost:5000/api`.
 
+No SQLite local, estas contas são criadas automaticamente:
+
+| Nível | Usuário | Senha |
+| --- | --- | --- |
+| Cliente | `010101` | `000001` |
+| Gestor | `020202` | `000002` |
+
+Os usuários aceitam somente letras e números, com mínimo de 6 caracteres. A
+senha também tem mínimo de 6 caracteres.
+
 O guia de banco de dados e deploy está em [SETUP.md](./SETUP.md).

@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { safeUser, findUserByEmail, createUser } = require('../config/store');
+const { safeUser, findUserByLogin, createUser } = require('../config/store');
 
 function gerarToken(usuario) {
   return jwt.sign({ id: usuario.id, papel: usuario.papel }, process.env.JWT_SECRET, {
@@ -13,15 +13,16 @@ function gerarToken(usuario) {
 // informar o código de convite correto (MANAGER_INVITE_CODE).
 async function registrar(req, res) {
   try {
-    const { nome, email, telefone, senha, codigoGestor } = req.body;
+    const { nome, login, telefone, senha, codigoGestor } = req.body;
 
-    if (!nome || !email || !senha) {
-      return res.status(400).json({ mensagem: 'Nome, e-mail e senha são obrigatórios.' });
+    if (!nome || !login || !senha) {
+      return res.status(400).json({ mensagem: 'Nome, usuário e senha são obrigatórios.' });
     }
+    if (!/^[a-z0-9]{6,}$/i.test(login) || senha.length < 6) return res.status(400).json({ mensagem: 'Usuário deve ter ao menos 6 letras ou números, e a senha ao menos 6 caracteres.' });
 
-    const usuarioExistente = await findUserByEmail(email);
+    const usuarioExistente = await findUserByLogin(login);
     if (usuarioExistente) {
-      return res.status(409).json({ mensagem: 'Já existe uma conta com este e-mail.' });
+      return res.status(409).json({ mensagem: 'Este usuário já está em uso.' });
     }
 
     let papel = 'cliente';
@@ -29,7 +30,7 @@ async function registrar(req, res) {
       papel = 'gestor';
     }
 
-    const usuario = await createUser({ nome, email, telefone, senha, papel });
+    const usuario = await createUser({ nome, login, telefone, senha, papel });
     const token = gerarToken(usuario);
 
     return res.status(201).json({ usuario: safeUser(usuario), token });
@@ -42,15 +43,15 @@ async function registrar(req, res) {
 // POST /api/auth/login
 async function login(req, res) {
   try {
-    const { email, senha } = req.body;
+    const { login, senha } = req.body;
 
-    if (!email || !senha) {
-      return res.status(400).json({ mensagem: 'Informe e-mail e senha.' });
+    if (!login || !senha) {
+      return res.status(400).json({ mensagem: 'Informe usuário e senha.' });
     }
 
-    const usuario = await findUserByEmail(email);
+    const usuario = await findUserByLogin(login);
     if (!usuario || !(await bcrypt.compare(senha, usuario.senha))) {
-      return res.status(401).json({ mensagem: 'E-mail ou senha inválidos.' });
+      return res.status(401).json({ mensagem: 'Usuário ou senha inválidos.' });
     }
 
     const token = gerarToken(usuario);
