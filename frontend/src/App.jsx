@@ -8,6 +8,8 @@ import ClienteAgenda from './pages/ClienteAgenda';
 import MinhasReservas from './pages/MinhasReservas';
 import GestorAgenda from './pages/GestorAgenda';
 import PaginaEmBreve from './pages/PaginaEmBreve';
+import Usuarios from './pages/Usuarios';
+import Catalogo from './pages/Catalogo';
 
 // Decide qual "página inicial" renderizar dentro do Layout, de acordo com o papel
 function PaginaInicial() {
@@ -44,7 +46,7 @@ export default function App() {
               path="usuarios"
               element={
                 <ProtectedRoute papeisPermitidos={['gestor']}>
-                  <PaginaEmBreve titulo="Usuários" descricao="Gerencie os usuários e seus níveis de acesso." />
+                  <Usuarios />
                 </ProtectedRoute>
               }
             />
@@ -52,7 +54,7 @@ export default function App() {
               path="catalogo"
               element={
                 <ProtectedRoute papeisPermitidos={['gestor']}>
-                  <PaginaEmBreve titulo="Catálogo" descricao="Cadastre e organize os serviços oferecidos." />
+                  <Catalogo />
                 </ProtectedRoute>
               }
             />

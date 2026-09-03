@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import AlertaTemporario from '../components/AlertaTemporario';
 
 export default function Registrar() {
   const { registrar } = useAuth();
@@ -33,7 +34,7 @@ export default function Registrar() {
         <h1>Criar conta</h1>
         <p className="subtitulo">Cadastre-se para marcar seu horário</p>
 
-        {erro && <div className="alerta-erro">{erro}</div>}
+        <AlertaTemporario tipo="erro" mensagem={erro} />
 
         <label>
           Nome completo

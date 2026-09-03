@@ -7,6 +7,7 @@ const sqlite3 = require('sqlite3');
 const connectMongo = require('./db');
 const User = require('../models/User');
 const Availability = require('../models/Availability');
+const Service = require('../models/Service');
 
 let sqlitePromise;
 
@@ -36,6 +37,13 @@ async function sqlite() {
           criado_por TEXT,
           slots TEXT NOT NULL DEFAULT '[]'
         );
+        CREATE TABLE IF NOT EXISTS services (
+          id TEXT PRIMARY KEY,
+          nome TEXT NOT NULL COLLATE NOCASE UNIQUE,
+          duracao_minutos INTEGER NOT NULL,
+          criado_por TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
       `);
       const columns = await db.all('PRAGMA table_info(users)');
       if (!columns.some((column) => column.name === 'login')) {
@@ -43,11 +51,21 @@ async function sqlite() {
         await db.exec("UPDATE users SET login = lower(substr(email, 1, instr(email || '@', '@') - 1)) WHERE login IS NULL");
         await db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_login_unique ON users(login)');
       }
+      await ensureUserPasswordHashes(db);
       await seedDevelopmentUsers(db);
       return db;
     });
   }
   return sqlitePromise;
+}
+
+async function ensureUserPasswordHashes(db) {
+  const users = await db.all('SELECT id, senha FROM users');
+  for (const user of users) {
+    if (!user.senha.startsWith('$2a$') && !user.senha.startsWith('$2b$') && !user.senha.startsWith('$2y$')) {
+      await db.run('UPDATE users SET senha = ? WHERE id = ?', await bcrypt.hash(user.senha, 10), user.id);
+    }
+  }
 }
 
 async function connectStore() {
@@ -97,6 +115,66 @@ async function createUser({ nome, login, telefone, senha, papel }) {
     nome, login.toLowerCase(), telefone || '', await bcrypt.hash(senha, 10), papel
   );
   return findUserById(result.lastID);
+}
+
+async function listUsers() {
+  if (usingMongo()) return (await User.find().sort({ nome: 1 })).map(mapMongoUser);
+  return (await (await sqlite()).all('SELECT id, nome, login, telefone, senha, papel FROM users ORDER BY nome COLLATE NOCASE ASC'));
+}
+
+async function updateUser(id, { nome, login, telefone, senha, papel }) {
+  if (usingMongo()) {
+    const user = await User.findById(id).select('+senha');
+    if (!user) return null;
+    user.nome = nome;
+    user.login = login.toLowerCase();
+    user.telefone = telefone || '';
+    user.papel = papel;
+    if (senha) user.senha = senha;
+    await user.save();
+    return mapMongoUser(user);
+  }
+
+  const db = await sqlite();
+  const values = [nome, login.toLowerCase(), telefone || '', papel];
+  let sql = 'UPDATE users SET nome = ?, login = ?, telefone = ?, papel = ?';
+  if (senha) {
+    sql += ', senha = ?';
+    values.push(await bcrypt.hash(senha, 10));
+  }
+  sql += ' WHERE id = ?';
+  values.push(id);
+  const result = await db.run(sql, values);
+  return result.changes ? findUserById(id) : null;
+}
+
+async function deleteUser(id) {
+  if (usingMongo()) return Boolean(await User.findByIdAndDelete(id));
+  const result = await (await sqlite()).run('DELETE FROM users WHERE id = ?', id);
+  return result.changes > 0;
+}
+
+function mapService(service) {
+  if (!service) return null;
+  return { id: String(service._id || service.id), nome: service.nome, duracaoMinutos: Number(service.duracaoMinutos ?? service.duracao_minutos) };
+}
+
+async function listServices() {
+  if (usingMongo()) return (await Service.find().sort({ nome: 1 })).map(mapService);
+  return (await (await sqlite()).all('SELECT id, nome, duracao_minutos FROM services ORDER BY nome COLLATE NOCASE ASC')).map(mapService);
+}
+
+async function createService({ nome, duracaoMinutos, criadoPor }) {
+  if (usingMongo()) return mapService(await Service.create({ nome, duracaoMinutos, criadoPor }));
+  const id = randomUUID();
+  await (await sqlite()).run('INSERT INTO services (id, nome, duracao_minutos, criado_por) VALUES (?, ?, ?, ?)', id, nome, duracaoMinutos, criadoPor || null);
+  return { id, nome, duracaoMinutos };
+}
+
+async function deleteAgenda(data) {
+  if (usingMongo()) return Boolean(await Availability.findOneAndDelete({ data }));
+  const result = await (await sqlite()).run('DELETE FROM agendas WHERE data = ?', data);
+  return result.changes > 0;
 }
 
 function normalizeAgenda(agenda) {
@@ -158,4 +236,4 @@ function newSlot(horario) {
   return usingMongo() ? { horario, status: 'disponivel' } : { _id: randomUUID(), horario, status: 'disponivel' };
 }
 
-module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, findAgenda, listAgendas, saveAgenda, newSlot };
+module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, deleteUser, listServices, createService, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };

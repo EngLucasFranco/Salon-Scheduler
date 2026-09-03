@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
+import AlertaTemporario from '../components/AlertaTemporario';
 
 function hoje() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function formatarDataAba(data) {
+  return new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })
+    .format(new Date(`${data}T00:00:00`))
+    .replace('.', '');
+}
+
 export default function ClienteAgenda() {
   const [data, setData] = useState(hoje());
   const [agenda, setAgenda] = useState(null);
+  const [agendasAbertas, setAgendasAbertas] = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
   const [mensagem, setMensagem] = useState('');
@@ -27,10 +35,29 @@ export default function ClienteAgenda() {
     }
   }
 
+  async function carregarAgendasAbertas() {
+    try {
+      const { data: agendas } = await api.get('/agenda/abertas');
+      setAgendasAbertas(agendas);
+      setData((dataAtual) => {
+        if (agendas.some((agendaAberta) => agendaAberta.data === dataAtual)) return dataAtual;
+        return agendas.find((agendaAberta) => agendaAberta.data >= hoje())?.data || agendas[0]?.data || dataAtual;
+      });
+    } catch (err) {
+      setErro('NÃ£o foi possÃ­vel carregar os dias com agenda aberta.');
+    }
+  }
+
   useEffect(() => {
     carregarAgenda(data);
     setMensagem('');
+    setSlotSelecionado(null);
+    setServico('');
   }, [data]);
+
+  useEffect(() => {
+    carregarAgendasAbertas();
+  }, []);
 
   async function confirmarReserva() {
     if (!slotSelecionado) return;
@@ -60,8 +87,33 @@ export default function ClienteAgenda() {
         </label>
       </div>
 
-      {mensagem && <div className="alerta-sucesso">{mensagem}</div>}
-      {erro && <div className="alerta-erro">{erro}</div>}
+      <section className="agendas-abertas" aria-label="Agendas abertas">
+        <div className="agendas-abertas-cabecalho">
+          <strong>{agendasAbertas.length} {agendasAbertas.length === 1 ? 'dia com agenda aberta' : 'dias com agenda aberta'}</strong>
+          <span>Selecione uma aba para visualizar o dia.</span>
+        </div>
+        {agendasAbertas.length > 0 ? (
+          <div className="sub-abas" role="tablist" aria-label="Dias com agenda aberta">
+            {agendasAbertas.map((item) => (
+              <button
+                key={item.data}
+                type="button"
+                role="tab"
+                aria-selected={item.data === data}
+                className={'sub-aba' + (item.data === data ? ' ativa' : '')}
+                onClick={() => setData(item.data)}
+              >
+                {formatarDataAba(item.data)}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className="agendas-abertas-vazio">Nenhuma agenda aberta no momento.</span>
+        )}
+      </section>
+
+      <AlertaTemporario tipo="sucesso" mensagem={mensagem} />
+      <AlertaTemporario tipo="erro" mensagem={erro} />
 
       {carregando && <p>Carregando horários...</p>}
 

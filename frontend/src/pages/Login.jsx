@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import AlertaTemporario from '../components/AlertaTemporario';
 
 export default function Login() {
   const { login } = useAuth();
@@ -30,7 +31,7 @@ export default function Login() {
         <h1>💇 Agenda Salão</h1>
         <p className="subtitulo">Entre para ver ou marcar seu horário</p>
 
-        {erro && <div className="alerta-erro">{erro}</div>}
+        <AlertaTemporario tipo="erro" mensagem={erro} />
 
         <label>
           Usuário
