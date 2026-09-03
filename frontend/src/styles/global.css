@@ -303,39 +303,36 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .tela-carregando { display: flex; align-items: center; justify-content: center; height: 100vh; color: var(--cor-texto-suave); }
 
 @media (max-width: 720px) {
-  .app-shell { flex-direction: column; }
+  .app-shell { display: block; }
 
   .sidebar {
     width: 100%;
     height: auto;
-    min-height: 0;
-    position: sticky;
+    min-height: 64px;
+    position: fixed;
     z-index: 10;
-    top: 0;
+    bottom: 0;
+    left: 0;
     flex-direction: row;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    box-shadow: 0 2px 8px rgba(31, 27, 46, 0.06);
+    gap: 4px;
+    padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
+    border-right: none;
+    border-top: 1px solid var(--cor-borda);
+    box-shadow: 0 -2px 8px rgba(31, 27, 46, 0.06);
   }
 
-  .sidebar-topo {
-    display: flex;
-    min-width: 0;
-    flex: 1 1 100%;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
+  .sidebar-topo { display: none; }
 
-  .logo-salao { margin: 0; padding: 0; }
-  .sidebar-usuario { margin: 0; padding: 6px 8px; }
-  .sidebar-nav { flex: 1; flex-direction: row; margin: 0; gap: 6px; }
-  .sidebar-link { justify-content: center; flex: 1; padding: 10px 8px; white-space: nowrap; }
-  .sidebar-sair { padding: 10px 12px; }
+  .sidebar-nav { flex: 1; flex-direction: row; margin: 0; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+  .sidebar-nav::-webkit-scrollbar { display: none; }
+  .sidebar-link { justify-content: center; flex: 0 0 auto; min-width: max-content; padding: 9px 10px; flex-direction: row; gap: 6px; font-size: 0.7rem; white-space: nowrap; }
+  .sidebar-link svg { width: 19px; height: 19px; }
+  .sidebar-sair { padding: 8px; }
+  .sidebar-sair span { display: none; }
+  .sidebar-sair svg { width: 19px; height: 19px; }
 
-  .conteudo { padding: 24px 20px; }
+  .conteudo { padding: 24px 20px 92px; }
   .pagina-header { margin-bottom: 20px; }
   .pagina-header h1 { font-size: 1.35rem; }
 
@@ -365,14 +362,11 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
   .tela-auth { align-items: flex-start; padding: 14px; }
   .card-auth { margin-top: 24px; padding: 24px 20px; border-radius: 14px; }
 
-  .sidebar { padding: 8px 10px; }
-  .sidebar-usuario { background: transparent; padding: 0; }
-  .sidebar-usuario > div:last-child { display: none; }
-  .sidebar-link { flex: 0 1 48px; padding: 10px; }
-  .sidebar-link span, .sidebar-sair span { display: none; }
-  .sidebar-sair { padding: 10px; }
+  .sidebar { padding: 4px 5px calc(4px + env(safe-area-inset-bottom)); }
+  .sidebar-link { padding: 8px; font-size: 0.64rem; }
+  .sidebar-sair { padding: 7px 5px; }
 
-  .conteudo { padding: 18px 14px 24px; }
+  .conteudo { padding: 18px 14px 88px; }
   .seletor-data label, .seletor-data input { width: 100%; }
   .grade-horarios { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .painel-confirmacao-botoes { flex-direction: column-reverse; }

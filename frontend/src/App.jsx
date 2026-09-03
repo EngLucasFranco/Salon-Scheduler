@@ -7,6 +7,7 @@ import Registrar from './pages/Registrar';
 import ClienteAgenda from './pages/ClienteAgenda';
 import MinhasReservas from './pages/MinhasReservas';
 import GestorAgenda from './pages/GestorAgenda';
+import PaginaEmBreve from './pages/PaginaEmBreve';
 
 // Decide qual "página inicial" renderizar dentro do Layout, de acordo com o papel
 function PaginaInicial() {
@@ -31,6 +32,54 @@ export default function App() {
             }
           >
             <Route index element={<PaginaInicial />} />
+            <Route
+              path="dashboard"
+              element={
+                <ProtectedRoute papeisPermitidos={['gestor']}>
+                  <PaginaEmBreve titulo="Dashboard" descricao="Visualize os principais indicadores do seu negócio." />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="usuarios"
+              element={
+                <ProtectedRoute papeisPermitidos={['gestor']}>
+                  <PaginaEmBreve titulo="Usuários" descricao="Gerencie os usuários e seus níveis de acesso." />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="catalogo"
+              element={
+                <ProtectedRoute papeisPermitidos={['gestor']}>
+                  <PaginaEmBreve titulo="Catálogo" descricao="Cadastre e organize os serviços oferecidos." />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="fluxo-de-caixa"
+              element={
+                <ProtectedRoute papeisPermitidos={['gestor']}>
+                  <PaginaEmBreve titulo="Fluxo de caixa" descricao="Acompanhe as entradas e saídas financeiras." />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="relatorios"
+              element={
+                <ProtectedRoute papeisPermitidos={['gestor']}>
+                  <PaginaEmBreve titulo="Relatórios" descricao="Analise os resultados e a evolução do negócio." />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="configuracoes"
+              element={
+                <ProtectedRoute papeisPermitidos={['gestor']}>
+                  <PaginaEmBreve titulo="Configurações" descricao="Ajuste as preferências do seu negócio." />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="minhas-reservas"
               element={

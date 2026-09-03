@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 export default function Registrar() {
   const { registrar } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ nome: '', login: '', telefone: '', senha: '', codigoGestor: '' });
+  const [form, setForm] = useState({ nome: '', login: '', telefone: '', senha: '' });
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -53,15 +53,6 @@ export default function Registrar() {
         <label>
           Senha
           <input type="password" value={form.senha} onChange={(e) => atualizar('senha', e.target.value)} minLength={6} required />
-        </label>
-
-        <label>
-          Código de gestor (opcional)
-          <input
-            value={form.codigoGestor}
-            onChange={(e) => atualizar('codigoGestor', e.target.value)}
-            placeholder="Deixe em branco se for cliente"
-          />
         </label>
 
         <button type="submit" disabled={enviando}>

@@ -9,11 +9,10 @@ function gerarToken(usuario) {
 }
 
 // POST /api/auth/registrar
-// Cadastro público sempre cria "cliente". Para virar "gestor" é preciso
-// informar o código de convite correto (MANAGER_INVITE_CODE).
+// Cadastro público sempre cria "cliente". O nível de acesso é definido no programa.
 async function registrar(req, res) {
   try {
-    const { nome, login, telefone, senha, codigoGestor } = req.body;
+    const { nome, login, telefone, senha } = req.body;
 
     if (!nome || !login || !senha) {
       return res.status(400).json({ mensagem: 'Nome, usuário e senha são obrigatórios.' });
@@ -25,12 +24,7 @@ async function registrar(req, res) {
       return res.status(409).json({ mensagem: 'Este usuário já está em uso.' });
     }
 
-    let papel = 'cliente';
-    if (codigoGestor && codigoGestor === process.env.MANAGER_INVITE_CODE) {
-      papel = 'gestor';
-    }
-
-    const usuario = await createUser({ nome, login, telefone, senha, papel });
+    const usuario = await createUser({ nome, login, telefone, senha, papel: 'cliente' });
     const token = gerarToken(usuario);
 
     return res.status(201).json({ usuario: safeUser(usuario), token });
