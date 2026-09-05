@@ -10,16 +10,16 @@ router.use(protect); // todas as rotas de agenda exigem login
 router.get('/minhas-reservas', ctrl.minhasReservas);
 router.get('/abertas', ctrl.listarAgendasAbertas);
 router.post('/:data/slots/:slotId/reservar', ctrl.reservarSlot);
-router.patch('/:data/slots/:slotId/cancelar-meu', ctrl.cancelarPropriaReserva);
 
 // Rotas do gestor
-router.post('/', authorize('gestor'), ctrl.abrirAgenda);
-router.get('/', authorize('gestor'), ctrl.listarAgendaCompleta);
-router.patch('/:data/fechar', authorize('gestor'), ctrl.fecharAgenda);
-router.delete('/:data', authorize('gestor'), ctrl.excluirAgenda);
-router.delete('/:data/slots/:slotId', authorize('gestor'), ctrl.removerSlot);
-router.patch('/:data/slots/:slotId/bloquear', authorize('gestor'), ctrl.bloquearSlot);
-router.patch('/:data/slots/:slotId/cancelar', authorize('gestor'), ctrl.cancelarReservaGestor);
+router.post('/', authorize('gestor', 'colaborador'), ctrl.abrirAgenda);
+router.get('/', authorize('gestor', 'colaborador'), ctrl.listarAgendaCompleta);
+router.patch('/:data/fechar', authorize('gestor', 'colaborador'), ctrl.fecharAgenda);
+router.delete('/:data', authorize('gestor', 'colaborador'), ctrl.excluirAgenda);
+router.delete('/:data/slots/:slotId', authorize('gestor', 'colaborador'), ctrl.removerSlot);
+router.patch('/:data/slots/:slotId/bloquear', authorize('gestor', 'colaborador'), ctrl.bloquearSlot);
+router.patch('/:data/slots/:slotId/cancelar', authorize('gestor', 'colaborador'), ctrl.cancelarReservaGestor);
+router.patch('/:data/slots/:slotId/cancelar-servico/:serviceId', authorize('gestor', 'colaborador'), ctrl.cancelarServicoReservaGestor);
 
 // Rota compartilhada (cliente vê versão resumida, gestor vê versão completa)
 router.get('/:data', ctrl.listarPorData);

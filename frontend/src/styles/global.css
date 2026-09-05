@@ -136,18 +136,27 @@ body {
 .acoes-tabela { display: flex; gap: 8px; }
 .badge-cliente { background: #e0f2fe; color: #0369a1; }
 .badge-gestor { background: #ede9fe; color: var(--cor-primaria-escura); }
+.badge-colaborador { background: #fef3c7; color: #92400e; }
 
 /* ---------- Catálogo de serviços ---------- */
 .card-cadastro-servico, .lista-catalogo { background: var(--cor-superficie); border: 1px solid var(--cor-borda); border-radius: var(--raio); padding: 18px 20px; }
 .card-cadastro-servico { margin-bottom: 20px; }
 .card-cadastro-servico h2, .lista-catalogo h2 { margin: 0 0 16px; font-size: 1.05rem; }
+.cabecalho-lista-catalogo { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.cabecalho-lista-catalogo h2 { margin: 0; }
+.seletor-visualizacao { display: flex; gap: 6px; }
+.seletor-visualizacao .ativo { background: var(--cor-primaria); color: white; border-color: var(--cor-primaria); }
 .catalogo-form { align-items: end; margin: 0; }
 .catalogo-form label:first-child { flex: 1 1 280px; }
 .catalogo-form label:nth-child(2) { flex: 0 1 190px; }
 .catalogo-form button { flex: 0 0 auto; }
 .lista-servicos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
 .card-servico { border: 1px solid var(--cor-borda); border-radius: 10px; padding: 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.card-servico > div:first-child { display: flex; flex-direction: column; gap: 3px; }
 .card-servico span { color: var(--cor-texto-suave); font-size: 0.86rem; white-space: nowrap; }
+.acoes-servico { display: flex; gap: 8px; flex-shrink: 0; }
+.lista-servicos.visualizacao-lista { display: flex; flex-direction: column; gap: 8px; }
+.visualizacao-lista .card-servico { border-radius: 8px; padding: 10px 14px; }
 
 .modal-fundo { position: fixed; z-index: 30; inset: 0; background: rgba(31, 27, 46, 0.48); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .modal { width: 100%; max-width: 490px; max-height: calc(100vh - 40px); overflow-y: auto; background: var(--cor-superficie); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.25); }
@@ -250,6 +259,47 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .alerta-sucesso { background: #dcfce7; color: var(--cor-sucesso); }
 .aviso-vazio { background: var(--cor-superficie); border: 1px dashed var(--cor-borda); color: var(--cor-texto-suave); }
 
+/* ---------- Configurações ---------- */
+.configuracoes-abas {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--cor-borda);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.configuracoes-aba {
+  flex: 0 0 auto;
+  padding: 11px 16px;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--cor-texto-suave);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.configuracoes-aba:hover { background: #ece9f7; color: var(--cor-texto); }
+.configuracoes-aba.ativa { background: #ede9fe; color: var(--cor-primaria-escura); box-shadow: inset 0 -3px 0 var(--cor-primaria); }
+.configuracoes-aba:focus-visible { outline: 2px solid var(--cor-primaria); outline-offset: -2px; }
+.configuracoes-painel { margin-bottom: 0; }
+.configuracoes-painel-cabecalho { margin-bottom: 18px; }
+.configuracoes-painel-cabecalho h2, .card-profissional h3, .lista-profissionais h3 { margin: 0; font-size: 1.05rem; }
+.configuracoes-painel-cabecalho p { margin: 4px 0 0; color: var(--cor-texto-suave); }
+.card-profissional, .lista-profissionais { background: var(--cor-superficie); border: 1px solid var(--cor-borda); border-radius: var(--raio); padding: 18px 20px; }
+.card-profissional { margin-bottom: 18px; }
+.card-profissional h3, .lista-profissionais h3 { margin-bottom: 16px; }
+.formulario-profissional { align-items: end; margin: 0; }
+.formulario-profissional label { flex: 1 1 180px; }
+.formulario-profissional button { flex: 0 0 auto; }
+.lista-profissionais { display: flex; flex-direction: column; gap: 10px; }
+.lista-profissionais h3 { margin-bottom: 2px; }
+.card-profissional-item { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--cor-borda); border-radius: 10px; }
+.card-profissional-item strong { display: block; }
+.card-profissional-item p { margin: 3px 0 0; color: var(--cor-texto-suave); font-size: 0.86rem; }
+.avatar-profissional { width: 38px; height: 38px; flex: 0 0 38px; border-radius: 50%; display: grid; place-items: center; background: #ede9fe; color: var(--cor-primaria-escura); font-weight: 700; }
+
 /* ---------- Seletor de data ---------- */
 .seletor-data { margin-bottom: 20px; }
 .seletor-data label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 0.85rem; color: var(--cor-texto-suave); width: fit-content; }
@@ -265,6 +315,12 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .sub-aba.ativa { background: var(--cor-primaria); color: white; border-color: var(--cor-primaria); }
 .sub-aba.fechada { background: #f1f0f6; color: var(--cor-texto-suave); }
 .sub-aba.fechada.ativa { background: var(--cor-primaria); color: white; border-color: var(--cor-primaria); }
+
+/* ---------- Agenda por profissional ---------- */
+.profissionais-agenda { background: var(--cor-superficie); border: 1px solid var(--cor-borda); border-radius: var(--raio); padding: 14px 16px; margin-bottom: 20px; }
+.profissionais-agenda-cabecalho { display: flex; flex-direction: column; gap: 3px; margin-bottom: 12px; }
+.profissionais-agenda-cabecalho strong { font-size: 0.92rem; }
+.profissionais-agenda-cabecalho span { color: var(--cor-texto-suave); font-size: 0.82rem; }
 
 /* ---------- Grade de horários (cliente) ---------- */
 .grade-horarios {
@@ -299,6 +355,11 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 }
 .painel-confirmacao label { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; font-weight: 600; color: var(--cor-texto-suave); }
 .painel-confirmacao-botoes { display: flex; gap: 10px; }
+.servicos-selecionados { display: flex; flex-direction: column; gap: 7px; padding: 12px; border: 1px solid var(--cor-borda); border-radius: 8px; background: var(--cor-fundo); font-size: 0.88rem; }
+.servico-selecionado { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.botao-remover-servico { width: 24px; height: 24px; padding: 0; border-radius: 50%; background: #fee2e2; color: var(--cor-erro); font-size: 1.2rem; line-height: 1; }
+.botao-remover-servico:hover { background: #fecaca; }
+.duracao-total { color: var(--cor-texto-suave); font-weight: 600; }
 
 /* ---------- Minhas reservas ---------- */
 .lista-reservas { display: flex; flex-direction: column; gap: 10px; }
@@ -397,12 +458,17 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 
   .grade-horarios { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
   .agendas-abertas { padding: 14px; overflow: hidden; }
+  .profissionais-agenda { padding: 14px; overflow: hidden; }
   .agendas-abertas-cabecalho { align-items: flex-start; flex-direction: column; gap: 3px; }
   .chip-horario { min-height: 46px; padding: 10px 6px; }
   .painel-confirmacao { max-width: none; padding: 16px; }
   .painel-confirmacao-botoes > button { flex: 1; }
 
   .card-abrir-agenda { padding: 16px; }
+  .configuracoes-abas { margin-right: -20px; padding-right: 20px; }
+  .formulario-profissional { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .formulario-profissional label { min-width: 0; }
+  .formulario-profissional label input, .formulario-profissional button { width: 100%; }
   .catalogo-form { display: flex; }
   .linha-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .linha-form label { min-width: 0; }
@@ -423,10 +489,17 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 @media (max-width: 560px) {
   .conteudo { padding-left: 16px; padding-right: 16px; }
+  .configuracoes-abas { margin-right: -16px; padding-right: 16px; }
+  .card-profissional, .lista-profissionais { padding: 16px; }
+  .formulario-profissional { grid-template-columns: 1fr; }
   .seletor-data label, .seletor-data input { width: 100%; }
   .linha-form { grid-template-columns: 1fr; }
   .catalogo-form { display: flex; }
   .catalogo-form label, .catalogo-form button { width: 100%; flex-basis: auto; }
+  .cabecalho-lista-catalogo { align-items: flex-start; flex-direction: column; }
+  .card-servico { align-items: flex-start; flex-direction: column; }
+  .acoes-servico { width: 100%; }
+  .acoes-servico button { flex: 1; }
   .linha-form-botoes { flex-direction: column; }
   .linha-form-botoes button { width: 100%; }
   .linha-slot { align-items: flex-start; flex-direction: column; }

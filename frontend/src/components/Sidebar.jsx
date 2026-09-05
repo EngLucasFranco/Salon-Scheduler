@@ -81,7 +81,9 @@ export default function Sidebar() {
     { to: '/configuracoes', label: 'Configurações', icon: iconeConfiguracoes },
   ];
 
-  const itens = usuario?.papel === 'gestor' ? itensGestor : itensCliente;
+  const itensColaborador = [{ to: '/', label: 'Gerenciar Agenda', icon: iconeGerenciar }];
+
+  const itens = usuario?.papel === 'gestor' ? itensGestor : usuario?.papel === 'colaborador' ? itensColaborador : itensCliente;
 
   return (
     <aside className="sidebar">
@@ -92,7 +94,7 @@ export default function Sidebar() {
             <div className="avatar">{usuario.nome?.charAt(0)?.toUpperCase()}</div>
             <div>
               <div className="sidebar-usuario-nome">{usuario.nome}</div>
-              <div className="sidebar-usuario-papel">{usuario.papel === 'gestor' ? 'Gestor(a)' : 'Cliente'}</div>
+              <div className="sidebar-usuario-papel">{usuario.papel === 'gestor' ? 'Gestor(a)' : usuario.papel === 'colaborador' ? 'Colaborador(a)' : 'Cliente'}</div>
             </div>
           </div>
         )}

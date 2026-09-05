@@ -11,6 +11,10 @@ const slotSchema = new mongoose.Schema(
       default: 'disponivel',
     },
     servico: { type: String, default: '' },
+    servicos: [{ id: String, nome: String, duracaoMinutos: Number }],
+    duracaoMinutos: { type: Number, default: 0 },
+    reservaId: { type: String, default: '' },
+    reservaInicio: { type: Boolean, default: false },
     cliente: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     clienteNome: { type: String, default: '' },
     observacao: { type: String, default: '' },
@@ -21,12 +25,17 @@ const slotSchema = new mongoose.Schema(
 const availabilitySchema = new mongoose.Schema(
   {
     // Data no formato YYYY-MM-DD (string) para facilitar consultas/índice único
-    data: { type: String, required: true, unique: true, index: true },
+    data: { type: String, required: true, index: true },
+    profissionalId: { type: String, required: true, index: true },
+    profissionalNome: { type: String, default: '' },
     aberta: { type: Boolean, default: true },
+    intervalo: { type: Number, default: 0 },
     slots: [slotSchema],
     criadoPor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }
 );
+
+availabilitySchema.index({ data: 1, profissionalId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Availability', availabilitySchema);

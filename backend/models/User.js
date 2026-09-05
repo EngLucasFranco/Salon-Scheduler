@@ -9,9 +9,10 @@ const userSchema = new mongoose.Schema(
     senha: { type: String, required: true, minlength: 6 },
     papel: {
       type: String,
-      enum: ['cliente', 'gestor'],
+      enum: ['cliente', 'gestor', 'colaborador'],
       default: 'cliente',
     },
+    profissionalId: { type: String, default: '' },
   },
   { timestamps: true }
 );
@@ -34,6 +35,7 @@ userSchema.methods.toSafeObject = function toSafeObject() {
     login: this.login,
     telefone: this.telefone,
     papel: this.papel,
+    profissionalId: this.profissionalId || '',
   };
 };
 

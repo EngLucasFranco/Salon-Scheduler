@@ -16,17 +16,21 @@ export default function ClienteAgenda() {
   const [data, setData] = useState(hoje());
   const [agenda, setAgenda] = useState(null);
   const [agendasAbertas, setAgendasAbertas] = useState([]);
+  const [profissionais, setProfissionais] = useState([]);
+  const [profissionalId, setProfissionalId] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
   const [mensagem, setMensagem] = useState('');
   const [slotSelecionado, setSlotSelecionado] = useState(null);
-  const [servico, setServico] = useState('');
+  const [servicosCatalogo, setServicosCatalogo] = useState([]);
+  const [servicosSelecionados, setServicosSelecionados] = useState([]);
+  const [servicoEscolhido, setServicoEscolhido] = useState('');
 
   async function carregarAgenda(d) {
     setCarregando(true);
     setErro('');
     try {
-      const { data: resp } = await api.get(`/agenda/${d}`);
+      const { data: resp } = await api.get(`/agenda/${d}`, { params: { profissionalId } });
       setAgenda(resp);
     } catch (err) {
       setErro('Não foi possível carregar a agenda deste dia.');
@@ -37,7 +41,7 @@ export default function ClienteAgenda() {
 
   async function carregarAgendasAbertas() {
     try {
-      const { data: agendas } = await api.get('/agenda/abertas');
+      const { data: agendas } = await api.get('/agenda/abertas', { params: { profissionalId } });
       setAgendasAbertas(agendas);
       setData((dataAtual) => {
         if (agendas.some((agendaAberta) => agendaAberta.data === dataAtual)) return dataAtual;
@@ -48,25 +52,49 @@ export default function ClienteAgenda() {
     }
   }
 
+  async function carregarServicos() {
+    try {
+      const { data: servicos } = await api.get('/servicos');
+      setServicosCatalogo(servicos);
+    } catch (err) {
+      setErro('Não foi possível carregar os serviços disponíveis.');
+    }
+  }
+
   useEffect(() => {
-    carregarAgenda(data);
+    if (profissionalId) carregarAgenda(data);
     setMensagem('');
     setSlotSelecionado(null);
-    setServico('');
-  }, [data]);
+    setServicosSelecionados([]);
+    setServicoEscolhido('');
+  }, [data, profissionalId]);
 
   useEffect(() => {
-    carregarAgendasAbertas();
+    carregarServicos();
+    api.get('/profissionais').then(({ data }) => {
+      setProfissionais(data);
+      if (data.length === 1) setProfissionalId(data[0].id);
+    }).catch(() => setErro('Não foi possível carregar os profissionais.'));
   }, []);
 
+  useEffect(() => { if (profissionalId) carregarAgendasAbertas(); }, [profissionalId]);
+
+  function adicionarServico() {
+    const servico = servicosCatalogo.find((item) => item.id === servicoEscolhido);
+    if (!servico) return;
+    setServicosSelecionados((anteriores) => [...anteriores, servico]);
+    setServicoEscolhido('');
+  }
+
   async function confirmarReserva() {
-    if (!slotSelecionado) return;
+    if (!slotSelecionado || !servicosSelecionados.length) return;
     setErro('');
     try {
-      await api.post(`/agenda/${data}/slots/${slotSelecionado._id}/reservar`, { servico });
+      await api.post(`/agenda/${data}/slots/${slotSelecionado._id}/reservar`, { servicos: servicosSelecionados.map((servico) => servico.id), profissionalId });
       setMensagem('Horário marcado com sucesso!');
       setSlotSelecionado(null);
-      setServico('');
+      setServicosSelecionados([]);
+      setServicoEscolhido('');
       carregarAgenda(data);
     } catch (err) {
       setErro(err.response?.data?.mensagem || 'Não foi possível marcar este horário.');
@@ -79,6 +107,13 @@ export default function ClienteAgenda() {
         <h1>Agenda Disponível</h1>
         <p>Escolha um dia e marque seu horário.</p>
       </header>
+
+      {profissionais.length > 1 && (
+        <div className="seletor-data"><label>Profissional<select value={profissionalId} onChange={(e) => setProfissionalId(e.target.value)}><option value="">Selecione um profissional</option>{profissionais.map((profissional) => <option key={profissional.id} value={profissional.id}>{profissional.nome}</option>)}</select></label></div>
+      )}
+      {!profissionais.length && <div className="aviso-vazio">Não há profissionais disponíveis para agendamento.</div>}
+
+      {profissionalId && <>
 
       <div className="seletor-data">
         <label>
@@ -154,21 +189,38 @@ export default function ClienteAgenda() {
         <div className="painel-confirmacao">
           <h3>Confirmar horário {slotSelecionado.horario}</h3>
           <label>
-            Serviço desejado (opcional)
-            <input
-              value={servico}
-              onChange={(e) => setServico(e.target.value)}
-              placeholder="Ex: corte, escova, coloração..."
-            />
+            Serviço desejado
+            <select value={servicoEscolhido} onChange={(e) => setServicoEscolhido(e.target.value)}>
+              <option value="">Selecione</option>
+              {servicosCatalogo.map((servico) => (
+                <option key={servico.id} value={servico.id} disabled={servicosSelecionados.some((item) => item.id === servico.id)}>
+                  {servico.nome} ({servico.duracaoMinutos} min)
+                </option>
+              ))}
+            </select>
           </label>
+          <button type="button" className="botao-secundario" onClick={adicionarServico} disabled={!servicoEscolhido}>OK</button>
+          {servicosSelecionados.length > 0 && (
+            <div className="servicos-selecionados">
+              <strong>Serviços selecionados</strong>
+              {servicosSelecionados.map((servico) => (
+                <div key={servico.id} className="servico-selecionado">
+                  <span>{servico.nome} · {servico.duracaoMinutos} min</span>
+                  <button type="button" className="botao-remover-servico" onClick={() => setServicosSelecionados((anteriores) => anteriores.filter((item) => item.id !== servico.id))} aria-label={`Remover ${servico.nome}`} title="Remover serviço">×</button>
+                </div>
+              ))}
+              <span className="duracao-total">Tempo total: {servicosSelecionados.reduce((total, servico) => total + servico.duracaoMinutos, 0)} min</span>
+            </div>
+          )}
           <div className="painel-confirmacao-botoes">
             <button className="botao-secundario" onClick={() => setSlotSelecionado(null)}>
               Cancelar
             </button>
-            <button onClick={confirmarReserva}>Confirmar marcação</button>
+            <button onClick={confirmarReserva} disabled={!servicosSelecionados.length}>Confirmar marcação</button>
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }

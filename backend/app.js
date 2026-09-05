@@ -5,6 +5,7 @@ const authRoutes = require('./routes/authRoutes');
 const availabilityRoutes = require('./routes/availabilityRoutes');
 const userRoutes = require('./routes/userRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
+const professionalRoutes = require('./routes/professionalRoutes');
 
 const app = express();
 const allowedOrigins = (process.env.CORS_ORIGIN || '')
@@ -47,6 +48,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/agenda', availabilityRoutes);
 app.use('/api/usuarios', userRoutes);
 app.use('/api/servicos', serviceRoutes);
+app.use('/api/profissionais', professionalRoutes);
 
 // Handler genérico de erros
 app.use((err, req, res, next) => {

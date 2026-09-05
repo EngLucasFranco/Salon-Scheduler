@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import ModalConfirmacao from '../components/ModalConfirmacao';
 import AlertaTemporario from '../components/AlertaTemporario';
+import { useAuth } from '../context/AuthContext';
 
 function hoje() {
   return new Date().toISOString().slice(0, 10);
@@ -30,9 +31,13 @@ function gerarHorarios(inicio, fim, intervaloMin) {
 }
 
 export default function GestorAgenda() {
+  const { usuario } = useAuth();
+  const colaborador = usuario?.papel === 'colaborador';
   const [data, setData] = useState(hoje());
   const [agenda, setAgenda] = useState(null);
   const [agendas, setAgendas] = useState([]);
+  const [profissionais, setProfissionais] = useState([]);
+  const [profissionalId, setProfissionalId] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
   const [mensagem, setMensagem] = useState('');
@@ -46,7 +51,7 @@ export default function GestorAgenda() {
     if (!emSegundoPlano) setCarregando(true);
     setErro('');
     try {
-      const { data: resp } = await api.get(`/agenda/${d}`);
+      const { data: resp } = await api.get(`/agenda/${d}`, { params: { profissionalId } });
       setAgenda(resp);
     } catch (err) {
       setErro('Não foi possível carregar a agenda deste dia.');
@@ -57,7 +62,7 @@ export default function GestorAgenda() {
 
   async function carregarAgendasAbertas() {
     try {
-      const { data: agendas } = await api.get('/agenda');
+      const { data: agendas } = await api.get('/agenda', { params: { profissionalId } });
       setAgendas(agendas);
     } catch (err) {
       setErro('Não foi possível carregar os dias com agenda aberta.');
@@ -65,12 +70,23 @@ export default function GestorAgenda() {
   }
 
   useEffect(() => {
-    carregarAgenda(data);
-  }, [data]);
+    if (profissionalId) carregarAgenda(data);
+  }, [data, profissionalId]);
 
   useEffect(() => {
-    carregarAgendasAbertas();
-  }, []);
+    if (colaborador) {
+      setProfissionalId(usuario.profissionalId || '');
+      return;
+    }
+    api.get('/profissionais').then(({ data }) => {
+      setProfissionais(data);
+      setProfissionalId(data[0]?.id || '');
+    }).catch(() => setErro('Não foi possível carregar os profissionais.'));
+  }, [colaborador, usuario?.profissionalId]);
+
+  useEffect(() => {
+    if (profissionalId) carregarAgendasAbertas();
+  }, [profissionalId]);
 
   const agendasAbertas = agendas.filter((item) => item.aberta);
   const agendaSelecionadaExiste = agendas.some((item) => item.data === data);
@@ -95,7 +111,7 @@ export default function GestorAgenda() {
       return;
     }
     try {
-      await api.post('/agenda', { data: formAgenda.data, inicio: formAgenda.inicio, fim: formAgenda.fim, intervalo: formAgenda.intervalo, horarios });
+      await api.post('/agenda', { data: formAgenda.data, inicio: formAgenda.inicio, fim: formAgenda.fim, intervalo: formAgenda.intervalo, horarios, profissionalId });
       setData(formAgenda.data);
       setModalAgendaAberto(false);
       setMensagem('Agenda do dia aberta/atualizada com sucesso!');
@@ -111,21 +127,24 @@ export default function GestorAgenda() {
     setConfirmando(true);
     try {
       if (confirmacao.tipo === 'fechar') {
-        await api.patch(`/agenda/${data}/fechar`);
+        await api.patch(`/agenda/${data}/fechar?profissionalId=${profissionalId}`);
         carregarAgendasAbertas();
       }
       if (confirmacao.tipo === 'excluir-agenda') {
-        await api.delete(`/agenda/${data}`);
+        await api.delete(`/agenda/${data}?profissionalId=${profissionalId}`);
         setData(hoje());
         await Promise.all([carregarAgenda(hoje()), carregarAgendasAbertas()]);
         setConfirmacao(null);
         return;
       }
       if (confirmacao.tipo === 'cancelar') {
-        await api.patch(`/agenda/${data}/slots/${confirmacao.slot._id}/cancelar`);
+        await api.patch(`/agenda/${data}/slots/${confirmacao.slot._id}/cancelar?profissionalId=${profissionalId}`);
+      }
+      if (confirmacao.tipo === 'cancelar-servico') {
+        await api.patch(`/agenda/${data}/slots/${confirmacao.slot._id}/cancelar-servico/${confirmacao.servico.id}?profissionalId=${profissionalId}`);
       }
       if (confirmacao.tipo === 'remover') {
-        await api.delete(`/agenda/${data}/slots/${confirmacao.slot._id}`);
+        await api.delete(`/agenda/${data}/slots/${confirmacao.slot._id}?profissionalId=${profissionalId}`);
       }
       setConfirmacao(null);
       carregarAgenda(data);
@@ -138,7 +157,7 @@ export default function GestorAgenda() {
 
   async function alternarBloqueio(slot) {
     try {
-      await api.patch(`/agenda/${data}/slots/${slot._id}/bloquear`);
+      await api.patch(`/agenda/${data}/slots/${slot._id}/bloquear?profissionalId=${profissionalId}`);
       await carregarAgenda(data, true);
     } catch (err) {
       setErro(err.response?.data?.mensagem || 'Não foi possível bloquear/desbloquear.');
@@ -152,7 +171,35 @@ export default function GestorAgenda() {
         <p>Abra os horários do dia e acompanhe as reservas dos clientes.</p>
       </header>
 
-      <button className="botao-abrir-agenda" onClick={abrirModalAgenda}>Abrir agenda</button>
+      {!colaborador && profissionais.length > 0 && (
+        <section className="profissionais-agenda" aria-label="Agendas por profissional">
+          <div className="profissionais-agenda-cabecalho">
+            <strong>Agenda por profissional</strong>
+            <span>Selecione um profissional para gerenciar seus horários e marcações.</span>
+          </div>
+          <div className="sub-abas" role="tablist" aria-label="Profissionais cadastrados">
+            {profissionais.map((profissional) => (
+              <button
+                key={profissional.id}
+                id={`aba-profissional-${profissional.id}`}
+                type="button"
+                role="tab"
+                aria-selected={profissional.id === profissionalId}
+                aria-controls="painel-agenda-profissional"
+                className={'sub-aba' + (profissional.id === profissionalId ? ' ativa' : '')}
+                onClick={() => setProfissionalId(profissional.id)}
+              >
+                {profissional.nome}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      {!colaborador && !profissionais.length && <div className="aviso-vazio">Cadastre ao menos um profissional em Configurações para abrir agendas.</div>}
+      {colaborador && !profissionalId && <div className="aviso-vazio">Seu usuário ainda não está associado a um profissional. Solicite o ajuste a um gestor.</div>}
+
+      <div id="painel-agenda-profissional" role="tabpanel" aria-labelledby={profissionalId ? `aba-profissional-${profissionalId}` : undefined}>
+      <button className="botao-abrir-agenda" onClick={abrirModalAgenda} disabled={!profissionalId}>Abrir agenda</button>
 
       <section className="agendas-abertas" aria-label="Agendas abertas">
         <div className="agendas-abertas-cabecalho">
@@ -209,10 +256,17 @@ export default function GestorAgenda() {
                 )}
               </div>
               <div className="linha-slot-acoes">
-                {slot.status === 'reservado' && (
-                  <button className="botao-pequeno" onClick={() => setConfirmacao({ tipo: 'cancelar', slot })}>
-                    Cancelar reserva
-                  </button>
+                {slot.status === 'reservado' && slot.reservaInicio !== false && (
+                  <>
+                    <button className="botao-pequeno" onClick={() => setConfirmacao({ tipo: 'cancelar', slot })}>
+                      Cancelar reserva completa
+                    </button>
+                    {(slot.servicos || []).length > 1 && slot.servicos.map((servico) => (
+                      <button key={servico.id} className="botao-pequeno botao-secundario" onClick={() => setConfirmacao({ tipo: 'cancelar-servico', slot, servico })}>
+                        Cancelar {servico.nome}
+                      </button>
+                    ))}
+                  </>
                 )}
                 {slot.status !== 'reservado' && (
                   <button className="botao-pequeno" onClick={() => alternarBloqueio(slot)}>
@@ -236,7 +290,7 @@ export default function GestorAgenda() {
 
       <ModalConfirmacao
         aberto={Boolean(confirmacao)}
-        titulo={confirmacao?.tipo === 'excluir-agenda' ? 'Excluir agenda' : confirmacao?.tipo === 'fechar' ? 'Fechar agenda' : confirmacao?.tipo === 'cancelar' ? 'Cancelar reserva' : 'Remover horário'}
+        titulo={confirmacao?.tipo === 'excluir-agenda' ? 'Excluir agenda' : confirmacao?.tipo === 'fechar' ? 'Fechar agenda' : confirmacao?.tipo === 'cancelar' ? 'Cancelar reserva' : confirmacao?.tipo === 'cancelar-servico' ? 'Cancelar serviço' : 'Remover horário'}
         mensagem={
           confirmacao?.tipo === 'excluir-agenda'
             ? 'Deseja excluir toda a agenda deste dia? Todos os horários e reservas desta agenda serão removidos.'
@@ -244,9 +298,11 @@ export default function GestorAgenda() {
             ? 'Deseja fechar a agenda deste dia? Os clientes não poderão fazer novas reservas.'
             : confirmacao?.tipo === 'cancelar'
               ? <>Deseja cancelar a reserva de <strong>{confirmacao.slot.clienteNome}</strong> às <strong>{confirmacao.slot.horario}</strong>?</>
+              : confirmacao?.tipo === 'cancelar-servico'
+                ? <>Deseja cancelar o serviço <strong>{confirmacao.servico.nome}</strong> da reserva de <strong>{confirmacao.slot.clienteNome}</strong>?</>
               : confirmacao && <>Deseja remover o horário de <strong>{confirmacao.slot.horario}</strong>?</>
         }
-        textoConfirmar={confirmacao?.tipo === 'excluir-agenda' ? 'Excluir agenda' : confirmacao?.tipo === 'fechar' ? 'Fechar agenda' : confirmacao?.tipo === 'cancelar' ? 'Cancelar reserva' : 'Remover horário'}
+        textoConfirmar={confirmacao?.tipo === 'excluir-agenda' ? 'Excluir agenda' : confirmacao?.tipo === 'fechar' ? 'Fechar agenda' : confirmacao?.tipo === 'cancelar' ? 'Cancelar reserva' : confirmacao?.tipo === 'cancelar-servico' ? 'Cancelar serviço' : 'Remover horário'}
         carregando={confirmando}
         onCancelar={() => setConfirmacao(null)}
         onConfirmar={executarConfirmacao}
@@ -286,6 +342,7 @@ export default function GestorAgenda() {
           </form>
         </div>
       )}
+      </div>
     </div>
   );
 }

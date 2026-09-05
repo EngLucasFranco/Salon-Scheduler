@@ -1,13 +1,14 @@
 const { safeUser, findUserByLogin, createUser, listUsers, updateUser, deleteUser } = require('../config/store');
 
-function validarUsuario({ nome, login, senha, papel }, senhaObrigatoria) {
+function validarUsuario({ nome, login, senha, papel, profissionalId }, senhaObrigatoria) {
   if (!nome?.trim() || !login?.trim() || (senhaObrigatoria && !senha)) {
     return 'Nome, usuário e senha são obrigatórios.';
   }
   if (!/^[a-z0-9]{6,}$/i.test(login) || (senha && senha.length < 6)) {
     return 'Usuário deve ter ao menos 6 letras ou números, e a senha ao menos 6 caracteres.';
   }
-  if (!['cliente', 'gestor'].includes(papel)) return 'Nível de acesso inválido.';
+  if (!['cliente', 'gestor', 'colaborador'].includes(papel)) return 'Nível de acesso inválido.';
+  if (papel === 'colaborador' && !profissionalId) return 'Selecione o profissional do colaborador.';
   return null;
 }
 
@@ -23,12 +24,12 @@ async function listar(req, res) {
 
 async function criar(req, res) {
   try {
-    const { nome, login, telefone, senha, papel } = req.body;
-    const erroValidacao = validarUsuario({ nome, login, senha, papel }, true);
+    const { nome, login, telefone, senha, papel, profissionalId } = req.body;
+    const erroValidacao = validarUsuario({ nome, login, senha, papel, profissionalId }, true);
     if (erroValidacao) return res.status(400).json({ mensagem: erroValidacao });
     if (await findUserByLogin(login)) return res.status(409).json({ mensagem: 'Este usuário já está em uso.' });
 
-    const usuario = await createUser({ nome: nome.trim(), login: login.trim(), telefone, senha, papel });
+    const usuario = await createUser({ nome: nome.trim(), login: login.trim(), telefone, senha, papel, profissionalId });
     return res.status(201).json(safeUser(usuario));
   } catch (erro) {
     if (erro.code === 11000) return res.status(409).json({ mensagem: 'Este usuário já está em uso.' });
@@ -39,15 +40,15 @@ async function criar(req, res) {
 
 async function atualizar(req, res) {
   try {
-    const { nome, login, telefone, senha, papel } = req.body;
-    const erroValidacao = validarUsuario({ nome, login, senha, papel }, false);
+    const { nome, login, telefone, senha, papel, profissionalId } = req.body;
+    const erroValidacao = validarUsuario({ nome, login, senha, papel, profissionalId }, false);
     if (erroValidacao) return res.status(400).json({ mensagem: erroValidacao });
     const existente = await findUserByLogin(login);
     if (existente && String(existente.id) !== String(req.params.id)) {
       return res.status(409).json({ mensagem: 'Este usuário já está em uso.' });
     }
 
-    const usuario = await updateUser(req.params.id, { nome: nome.trim(), login: login.trim(), telefone, senha, papel });
+    const usuario = await updateUser(req.params.id, { nome: nome.trim(), login: login.trim(), telefone, senha, papel, profissionalId });
     if (!usuario) return res.status(404).json({ mensagem: 'Usuário não encontrado.' });
     return res.json(safeUser(usuario));
   } catch (erro) {

@@ -10,11 +10,12 @@ import GestorAgenda from './pages/GestorAgenda';
 import PaginaEmBreve from './pages/PaginaEmBreve';
 import Usuarios from './pages/Usuarios';
 import Catalogo from './pages/Catalogo';
+import Configuracoes from './pages/Configuracoes';
 
 // Decide qual "página inicial" renderizar dentro do Layout, de acordo com o papel
 function PaginaInicial() {
   const { usuario } = useAuth();
-  return usuario?.papel === 'gestor' ? <GestorAgenda /> : <ClienteAgenda />;
+  return ['gestor', 'colaborador'].includes(usuario?.papel) ? <GestorAgenda /> : <ClienteAgenda />;
 }
 
 export default function App() {
@@ -78,7 +79,7 @@ export default function App() {
               path="configuracoes"
               element={
                 <ProtectedRoute papeisPermitidos={['gestor']}>
-                  <PaginaEmBreve titulo="Configurações" descricao="Ajuste as preferências do seu negócio." />
+                  <Configuracoes />
                 </ProtectedRoute>
               }
             />

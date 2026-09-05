@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import ModalConfirmacao from '../components/ModalConfirmacao';
 import AlertaTemporario from '../components/AlertaTemporario';
 
-const formularioInicial = { nome: '', login: '', telefone: '', senha: '', papel: 'cliente' };
+const formularioInicial = { nome: '', login: '', telefone: '', senha: '', papel: 'cliente', profissionalId: '' };
 
 export default function Usuarios() {
   const { usuario: usuarioLogado } = useAuth();
@@ -16,6 +16,7 @@ export default function Usuarios() {
   const [usuarioEmEdicao, setUsuarioEmEdicao] = useState(null);
   const [form, setForm] = useState(formularioInicial);
   const [salvando, setSalvando] = useState(false);
+  const [profissionais, setProfissionais] = useState([]);
 
   async function carregarUsuarios() {
     setCarregando(true);
@@ -31,6 +32,7 @@ export default function Usuarios() {
   }
 
   useEffect(() => { carregarUsuarios(); }, []);
+  useEffect(() => { api.get('/profissionais').then(({ data }) => setProfissionais(data)).catch(() => {}); }, []);
 
   function abrirCadastro() {
     setUsuarioEmEdicao(null);
@@ -41,7 +43,7 @@ export default function Usuarios() {
 
   function abrirEdicao(usuario) {
     setUsuarioEmEdicao(usuario);
-    setForm({ nome: usuario.nome, login: usuario.login, telefone: usuario.telefone || '', senha: '', papel: usuario.papel });
+    setForm({ nome: usuario.nome, login: usuario.login, telefone: usuario.telefone || '', senha: '', papel: usuario.papel, profissionalId: usuario.profissionalId || '' });
     setErro('');
     setModalAberto(true);
   }
@@ -108,7 +110,7 @@ export default function Usuarios() {
                   <td data-label="Nome">{usuario.nome}</td>
                   <td data-label="Usuário">{usuario.login}</td>
                   <td data-label="Telefone">{usuario.telefone || '—'}</td>
-                  <td data-label="Acesso"><span className={'badge badge-' + usuario.papel}>{usuario.papel === 'gestor' ? 'Gestor' : 'Cliente'}</span></td>
+                  <td data-label="Acesso"><span className={'badge badge-' + usuario.papel}>{usuario.papel === 'gestor' ? 'Gestor' : usuario.papel === 'colaborador' ? 'Colaborador' : 'Cliente'}</span></td>
                   <td data-label="Ações" className="acoes-tabela">
                     <button className="botao-pequeno botao-secundario" onClick={() => abrirEdicao(usuario)}>Editar</button>
                     <button className="botao-pequeno botao-perigo" onClick={() => setUsuarioParaExcluir(usuario)} disabled={usuario.id === usuarioLogado?.id}>Excluir</button>
@@ -139,8 +141,17 @@ export default function Usuarios() {
               <select value={form.papel} onChange={(e) => atualizar('papel', e.target.value)}>
                 <option value="cliente">Cliente</option>
                 <option value="gestor">Gestor</option>
+                <option value="colaborador">Colaborador</option>
               </select>
             </label>
+            {form.papel === 'colaborador' && (
+              <label>Profissional
+                <select value={form.profissionalId} onChange={(e) => atualizar('profissionalId', e.target.value)} required>
+                  <option value="">Selecione</option>
+                  {profissionais.map((profissional) => <option key={profissional.id} value={profissional.id}>{profissional.nome}</option>)}
+                </select>
+              </label>
+            )}
             <div className="modal-acoes">
               <button type="button" className="botao-secundario" onClick={fecharModal}>Cancelar</button>
               <button type="submit" disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar usuário'}</button>
