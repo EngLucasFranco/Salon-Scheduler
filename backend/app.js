@@ -6,6 +6,9 @@ const availabilityRoutes = require('./routes/availabilityRoutes');
 const userRoutes = require('./routes/userRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
 const professionalRoutes = require('./routes/professionalRoutes');
+const paymentMethodRoutes = require('./routes/paymentMethodRoutes');
+const chargeRoutes = require('./routes/chargeRoutes');
+const settingRoutes = require('./routes/settingRoutes');
 
 const app = express();
 const allowedOrigins = (process.env.CORS_ORIGIN || '')
@@ -49,6 +52,9 @@ app.use('/api/agenda', availabilityRoutes);
 app.use('/api/usuarios', userRoutes);
 app.use('/api/servicos', serviceRoutes);
 app.use('/api/profissionais', professionalRoutes);
+app.use('/api/formas-pagamento', paymentMethodRoutes);
+app.use('/api/cobrancas', chargeRoutes);
+app.use('/api/configuracoes', settingRoutes);
 
 // Handler genérico de erros
 app.use((err, req, res, next) => {

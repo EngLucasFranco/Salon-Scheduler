@@ -33,6 +33,10 @@ function limparReserva(slot) {
 function falha(res, erro, mensagem) { console.error(erro); return res.status(500).json({ mensagem }); }
 
 function minutosHorario(horario) { const [hora, minuto] = horario.split(':').map(Number); return hora * 60 + minuto; }
+function horarioEmIntervalo(horario, intervalos) {
+  const minutos = minutosHorario(horario);
+  return (intervalos || []).some((intervalo) => minutos >= minutosHorario(intervalo.inicio) && minutos < minutosHorario(intervalo.fim));
+}
 function intervaloAgenda(agenda, indice) {
   if (Number(agenda.intervalo) >= 5) return Number(agenda.intervalo);
   const proximo = agenda.slots[indice + 1];
@@ -56,7 +60,7 @@ async function abrirAgenda(req, res) {
     if (!data || !Array.isArray(horarios) || horarios.length === 0) return res.status(400).json({ mensagem: 'Informe a data e ao menos um horário.' });
     let agenda = await findAgenda(data, profissional.id);
     if (agenda) return res.status(409).json({ mensagem: agenda.aberta ? 'Já existe uma agenda aberta para esta data.' : 'Já existe uma agenda fechada para esta data.' });
-    agenda = { data, profissionalId: profissional.id, profissionalNome: profissional.nome, aberta: true, intervalo: Number(intervalo), criadoPor: req.usuario.id, slots: horarios.map(newSlot) };
+    agenda = { data, profissionalId: profissional.id, profissionalNome: profissional.nome, aberta: true, intervalo: Number(intervalo), criadoPor: req.usuario.id, slots: horarios.map((horario) => ({ ...newSlot(horario), status: horarioEmIntervalo(horario, profissional.intervalos) ? 'bloqueado' : 'disponivel' })) };
     agenda.slots.sort((a, b) => a.horario.localeCompare(b.horario)); agenda.aberta = true;
     return res.status(201).json(await saveAgenda(agenda));
   } catch (erro) { return falha(res, erro, 'Erro ao abrir a agenda.'); }
@@ -158,7 +162,7 @@ async function reservarSlot(req, res) {
     if (!idsServicos.length || new Set(idsServicos).size !== idsServicos.length) return res.status(400).json({ mensagem: 'Selecione ao menos um serviço.' });
     const catalogo = await listServices();
     const servicos = idsServicos.map((id) => catalogo.find((servico) => String(servico.id) === id));
-    if (servicos.some((servico) => !servico)) return res.status(400).json({ mensagem: 'Um ou mais serviços selecionados não estão disponíveis.' });
+    if (servicos.some((servico) => !servico || servico.tipo === 'produto')) return res.status(400).json({ mensagem: 'Um ou mais serviços selecionados não estão disponíveis.' });
     const indiceInicial = agenda.slots.findIndex((item) => String(item._id) === String(slot._id));
     const intervalo = intervaloAgenda(agenda, indiceInicial);
     const duracaoMinutos = servicos.reduce((total, servico) => total + Number(servico.duracaoMinutos), 0);

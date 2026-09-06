@@ -9,6 +9,9 @@ const User = require('../models/User');
 const Availability = require('../models/Availability');
 const Service = require('../models/Service');
 const Professional = require('../models/Professional');
+const PaymentMethod = require('../models/PaymentMethod');
+const Charge = require('../models/Charge');
+const AppSetting = require('../models/AppSetting');
 
 let sqlitePromise;
 
@@ -46,7 +49,9 @@ async function sqlite() {
         CREATE TABLE IF NOT EXISTS services (
           id TEXT PRIMARY KEY,
           nome TEXT NOT NULL COLLATE NOCASE UNIQUE,
-          duracao_minutos INTEGER NOT NULL,
+          tipo TEXT NOT NULL DEFAULT 'servico',
+          valor REAL NOT NULL DEFAULT 0,
+          duracao_minutos INTEGER,
           criado_por TEXT,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
@@ -55,8 +60,37 @@ async function sqlite() {
           nome TEXT NOT NULL COLLATE NOCASE UNIQUE,
           especialidade TEXT,
           telefone TEXT,
+          intervalos TEXT NOT NULL DEFAULT '[]',
           criado_por TEXT,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS payment_methods (
+          id TEXT PRIMARY KEY,
+          nome TEXT NOT NULL COLLATE NOCASE UNIQUE,
+          criado_por TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS charges (
+          id TEXT PRIMARY KEY,
+          data TEXT NOT NULL,
+          agenda_data TEXT NOT NULL DEFAULT '',
+          reserva_id TEXT NOT NULL DEFAULT '',
+          cliente_nome TEXT NOT NULL,
+          profissional_nome TEXT NOT NULL DEFAULT '',
+          forma_pagamento_id TEXT NOT NULL DEFAULT '',
+          forma_pagamento_nome TEXT NOT NULL DEFAULT '',
+          formas_pagamento TEXT NOT NULL DEFAULT '[]',
+          itens TEXT NOT NULL DEFAULT '[]',
+          desconto REAL NOT NULL DEFAULT 0,
+          acrescimo REAL NOT NULL DEFAULT 0,
+          total REAL NOT NULL DEFAULT 0,
+          criado_por TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS charges_reserva_id_unique ON charges(reserva_id) WHERE reserva_id <> '';
+        CREATE TABLE IF NOT EXISTS app_settings (
+          chave TEXT PRIMARY KEY,
+          valor TEXT NOT NULL
         );
       `);
       const columns = await db.all('PRAGMA table_info(users)');
@@ -75,6 +109,15 @@ async function sqlite() {
         agendaColumns = await db.all('PRAGMA table_info(agendas)');
       }
       if (!agendaColumns.some((column) => column.name === 'intervalo')) await db.exec('ALTER TABLE agendas ADD COLUMN intervalo INTEGER NOT NULL DEFAULT 0');
+      const serviceColumns = await db.all('PRAGMA table_info(services)');
+      if (!serviceColumns.some((column) => column.name === 'tipo')) await db.exec("ALTER TABLE services ADD COLUMN tipo TEXT NOT NULL DEFAULT 'servico'");
+      if (!serviceColumns.some((column) => column.name === 'valor')) await db.exec('ALTER TABLE services ADD COLUMN valor REAL NOT NULL DEFAULT 0');
+      const professionalColumns = await db.all('PRAGMA table_info(professionals)');
+      if (!professionalColumns.some((column) => column.name === 'intervalos')) await db.exec("ALTER TABLE professionals ADD COLUMN intervalos TEXT NOT NULL DEFAULT '[]'");
+      const chargeColumns = await db.all('PRAGMA table_info(charges)');
+      if (!chargeColumns.some((column) => column.name === 'desconto')) await db.exec('ALTER TABLE charges ADD COLUMN desconto REAL NOT NULL DEFAULT 0');
+      if (!chargeColumns.some((column) => column.name === 'acrescimo')) await db.exec('ALTER TABLE charges ADD COLUMN acrescimo REAL NOT NULL DEFAULT 0');
+      if (!chargeColumns.some((column) => column.name === 'formas_pagamento')) await db.exec("ALTER TABLE charges ADD COLUMN formas_pagamento TEXT NOT NULL DEFAULT '[]'");
       await ensureUserPasswordHashes(db);
       await seedDevelopmentUsers(db);
       return db;
@@ -181,27 +224,31 @@ async function deleteUser(id) {
 
 function mapService(service) {
   if (!service) return null;
-  return { id: String(service._id || service.id), nome: service.nome, duracaoMinutos: Number(service.duracaoMinutos ?? service.duracao_minutos) };
+  return { id: String(service._id || service.id), nome: service.nome, tipo: service.tipo || 'servico', valor: Number(service.valor || 0), duracaoMinutos: service.duracaoMinutos ?? service.duracao_minutos ? Number(service.duracaoMinutos ?? service.duracao_minutos) : null };
 }
 
 async function listServices() {
   if (usingMongo()) return (await Service.find().sort({ nome: 1 })).map(mapService);
-  return (await (await sqlite()).all('SELECT id, nome, duracao_minutos FROM services ORDER BY nome COLLATE NOCASE ASC')).map(mapService);
+  return (await (await sqlite()).all('SELECT id, nome, tipo, valor, duracao_minutos FROM services ORDER BY nome COLLATE NOCASE ASC')).map(mapService);
 }
 
-async function createService({ nome, duracaoMinutos, criadoPor }) {
-  if (usingMongo()) return mapService(await Service.create({ nome, duracaoMinutos, criadoPor }));
+async function createService({ nome, tipo, valor, duracaoMinutos, criadoPor }) {
+  if (usingMongo()) return mapService(await Service.create({ nome, tipo, valor, duracaoMinutos, criadoPor }));
   const id = randomUUID();
-  await (await sqlite()).run('INSERT INTO services (id, nome, duracao_minutos, criado_por) VALUES (?, ?, ?, ?)', id, nome, duracaoMinutos, criadoPor || null);
-  return { id, nome, duracaoMinutos };
+  // Bancos SQLite criados antes do suporte a produtos possuem duracao_minutos
+  // como NOT NULL. Produto não tem duração, mas zero mantém compatibilidade.
+  const duracaoArmazenada = tipo === 'produto' ? 0 : duracaoMinutos;
+  await (await sqlite()).run('INSERT INTO services (id, nome, tipo, valor, duracao_minutos, criado_por) VALUES (?, ?, ?, ?, ?, ?)', id, nome, tipo, valor, duracaoArmazenada, criadoPor || null);
+  return { id, nome, tipo, valor, duracaoMinutos };
 }
 
-async function updateService(id, { nome, duracaoMinutos }) {
+async function updateService(id, { nome, tipo, valor, duracaoMinutos }) {
   if (usingMongo()) {
-    return mapService(await Service.findByIdAndUpdate(id, { nome, duracaoMinutos }, { new: true, runValidators: true }));
+    return mapService(await Service.findByIdAndUpdate(id, { nome, tipo, valor, duracaoMinutos }, { new: true, runValidators: true }));
   }
-  const result = await (await sqlite()).run('UPDATE services SET nome = ?, duracao_minutos = ? WHERE id = ?', nome, duracaoMinutos, id);
-  return result.changes ? { id: String(id), nome, duracaoMinutos } : null;
+  const duracaoArmazenada = tipo === 'produto' ? 0 : duracaoMinutos;
+  const result = await (await sqlite()).run('UPDATE services SET nome = ?, tipo = ?, valor = ?, duracao_minutos = ? WHERE id = ?', nome, tipo, valor, duracaoArmazenada, id);
+  return result.changes ? { id: String(id), nome, tipo, valor, duracaoMinutos } : null;
 }
 
 async function deleteService(id) {
@@ -217,22 +264,101 @@ function mapProfessional(profissional) {
     nome: profissional.nome,
     especialidade: profissional.especialidade || '',
     telefone: profissional.telefone || '',
+    intervalos: typeof profissional.intervalos === 'string' ? JSON.parse(profissional.intervalos) : (profissional.intervalos || []),
   };
 }
 
 async function listProfessionals() {
   if (usingMongo()) return (await Professional.find().sort({ nome: 1 })).map(mapProfessional);
-  return (await (await sqlite()).all('SELECT id, nome, especialidade, telefone FROM professionals ORDER BY nome COLLATE NOCASE ASC')).map(mapProfessional);
+  return (await (await sqlite()).all('SELECT id, nome, especialidade, telefone, intervalos FROM professionals ORDER BY nome COLLATE NOCASE ASC')).map(mapProfessional);
 }
 
-async function createProfessional({ nome, especialidade, telefone, criadoPor }) {
-  if (usingMongo()) return mapProfessional(await Professional.create({ nome, especialidade, telefone, criadoPor }));
+async function createProfessional({ nome, especialidade, telefone, intervalos, criadoPor }) {
+  if (usingMongo()) return mapProfessional(await Professional.create({ nome, especialidade, telefone, intervalos, criadoPor }));
   const id = randomUUID();
   await (await sqlite()).run(
-    'INSERT INTO professionals (id, nome, especialidade, telefone, criado_por) VALUES (?, ?, ?, ?, ?)',
-    id, nome, especialidade || '', telefone || '', criadoPor || null
+    'INSERT INTO professionals (id, nome, especialidade, telefone, intervalos, criado_por) VALUES (?, ?, ?, ?, ?, ?)',
+    id, nome, especialidade || '', telefone || '', JSON.stringify(intervalos || []), criadoPor || null
   );
-  return { id, nome, especialidade: especialidade || '', telefone: telefone || '' };
+  return { id, nome, especialidade: especialidade || '', telefone: telefone || '', intervalos: intervalos || [] };
+}
+
+async function updateProfessional(id, { nome, especialidade, telefone, intervalos }) {
+  if (usingMongo()) return mapProfessional(await Professional.findByIdAndUpdate(id, { nome, especialidade, telefone, intervalos }, { new: true, runValidators: true }));
+  const result = await (await sqlite()).run('UPDATE professionals SET nome = ?, especialidade = ?, telefone = ?, intervalos = ? WHERE id = ?', nome, especialidade || '', telefone || '', JSON.stringify(intervalos || []), id);
+  return result.changes ? { id: String(id), nome, especialidade: especialidade || '', telefone: telefone || '', intervalos: intervalos || [] } : null;
+}
+
+async function deleteProfessional(id) {
+  if (usingMongo()) return Boolean(await Professional.findByIdAndDelete(id));
+  return Boolean((await (await sqlite()).run('DELETE FROM professionals WHERE id = ?', id)).changes);
+}
+
+function mapPaymentMethod(formaPagamento) {
+  if (!formaPagamento) return null;
+  return { id: String(formaPagamento._id || formaPagamento.id), nome: formaPagamento.nome };
+}
+
+async function listPaymentMethods() {
+  if (usingMongo()) return (await PaymentMethod.find().sort({ nome: 1 })).map(mapPaymentMethod);
+  return (await (await sqlite()).all('SELECT id, nome FROM payment_methods ORDER BY nome COLLATE NOCASE ASC')).map(mapPaymentMethod);
+}
+
+async function createPaymentMethod({ nome, criadoPor }) {
+  if (usingMongo()) return mapPaymentMethod(await PaymentMethod.create({ nome, criadoPor }));
+  const id = randomUUID();
+  await (await sqlite()).run('INSERT INTO payment_methods (id, nome, criado_por) VALUES (?, ?, ?)', id, nome, criadoPor || null);
+  return { id, nome };
+}
+
+function mapCharge(cobranca) {
+  if (!cobranca) return null;
+  return {
+    id: String(cobranca._id || cobranca.id), data: cobranca.data, agendaData: cobranca.agendaData || cobranca.agenda_data || '', reservaId: cobranca.reservaId || cobranca.reserva_id || '',
+    clienteNome: cobranca.clienteNome || cobranca.cliente_nome, profissionalNome: cobranca.profissionalNome || cobranca.profissional_nome || '',
+    formaPagamentoId: cobranca.formaPagamentoId || cobranca.forma_pagamento_id || '', formaPagamentoNome: cobranca.formaPagamentoNome || cobranca.forma_pagamento_nome || '',
+    formasPagamento: typeof cobranca.formasPagamento === 'string' ? JSON.parse(cobranca.formasPagamento) : (typeof cobranca.formas_pagamento === 'string' ? JSON.parse(cobranca.formas_pagamento) : (cobranca.formasPagamento || cobranca.formas_pagamento || [])),
+    itens: typeof cobranca.itens === 'string' ? JSON.parse(cobranca.itens) : (cobranca.itens || []), desconto: Number(cobranca.desconto || 0), acrescimo: Number(cobranca.acrescimo || 0), total: Number(cobranca.total || 0), createdAt: cobranca.createdAt || cobranca.created_at,
+  };
+}
+
+async function createCharge(cobranca) {
+  if (usingMongo()) return mapCharge(await Charge.create(cobranca));
+  const id = randomUUID();
+  await (await sqlite()).run('INSERT INTO charges (id, data, agenda_data, reserva_id, cliente_nome, profissional_nome, forma_pagamento_id, forma_pagamento_nome, formas_pagamento, itens, desconto, acrescimo, total, criado_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', id, cobranca.data, cobranca.agendaData, cobranca.reservaId, cobranca.clienteNome, cobranca.profissionalNome, cobranca.formaPagamentoId, cobranca.formaPagamentoNome, JSON.stringify(cobranca.formasPagamento || []), JSON.stringify(cobranca.itens), cobranca.desconto, cobranca.acrescimo, cobranca.total, cobranca.criadoPor || null);
+  return mapCharge(await (await sqlite()).get('SELECT * FROM charges WHERE id = ?', id));
+}
+
+async function listChargesByDate(data) {
+  if (usingMongo()) return (await Charge.find({ data }).sort({ createdAt: -1 })).map(mapCharge);
+  return (await (await sqlite()).all('SELECT * FROM charges WHERE data = ? ORDER BY created_at DESC', data)).map(mapCharge);
+}
+
+async function findChargeByReservation(reservaId) {
+  if (!reservaId) return null;
+  if (usingMongo()) return mapCharge(await Charge.findOne({ reservaId }));
+  return mapCharge(await (await sqlite()).get('SELECT * FROM charges WHERE reserva_id = ?', reservaId));
+}
+
+async function getLayoutSettings() {
+  const padrao = { administrativo: 'classico', cliente: 'classico' };
+  if (usingMongo()) {
+    const registros = await AppSetting.find({ chave: { $in: ['layout_administrativo', 'layout_cliente'] } });
+    return { administrativo: registros.find((item) => item.chave === 'layout_administrativo')?.valor || padrao.administrativo, cliente: registros.find((item) => item.chave === 'layout_cliente')?.valor || padrao.cliente };
+  }
+  const registros = await (await sqlite()).all("SELECT chave, valor FROM app_settings WHERE chave IN ('layout_administrativo', 'layout_cliente')");
+  return { administrativo: registros.find((item) => item.chave === 'layout_administrativo')?.valor || padrao.administrativo, cliente: registros.find((item) => item.chave === 'layout_cliente')?.valor || padrao.cliente };
+}
+
+async function saveLayoutSettings({ administrativo, cliente }) {
+  if (usingMongo()) {
+    await Promise.all([AppSetting.findOneAndUpdate({ chave: 'layout_administrativo' }, { valor: administrativo }, { upsert: true, new: true, setDefaultsOnInsert: true }), AppSetting.findOneAndUpdate({ chave: 'layout_cliente' }, { valor: cliente }, { upsert: true, new: true, setDefaultsOnInsert: true })]);
+    return { administrativo, cliente };
+  }
+  const db = await sqlite();
+  await db.run("INSERT INTO app_settings (chave, valor) VALUES ('layout_administrativo', ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", administrativo);
+  await db.run("INSERT INTO app_settings (chave, valor) VALUES ('layout_cliente', ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", cliente);
+  return { administrativo, cliente };
 }
 
 async function deleteAgenda(data, profissionalId) {
@@ -289,7 +415,7 @@ async function listAgendas(inicio, fim, profissionalId) {
 async function saveAgenda(agenda) {
   if (usingMongo()) {
     const saved = await Availability.findOneAndUpdate(
-      { data: agenda.data },
+      { data: agenda.data, profissionalId: agenda.profissionalId },
       { $set: { aberta: agenda.aberta, intervalo: agenda.intervalo || 0, profissionalNome: agenda.profissionalNome || '', criadoPor: agenda.criadoPor || undefined, slots: agenda.slots } },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
@@ -308,4 +434,4 @@ function newSlot(horario) {
   return usingMongo() ? { horario, status: 'disponivel' } : { _id: randomUUID(), horario, status: 'disponivel' };
 }
 
-module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, deleteUser, listServices, createService, updateService, deleteService, listProfessionals, createProfessional, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };
+module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, deleteUser, listServices, createService, updateService, deleteService, listProfessionals, createProfessional, updateProfessional, deleteProfessional, listPaymentMethods, createPaymentMethod, createCharge, listChargesByDate, findChargeByReservation, getLayoutSettings, saveLayoutSettings, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };

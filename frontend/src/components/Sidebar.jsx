@@ -72,11 +72,11 @@ export default function Sidebar() {
   ];
 
   const itensGestor = [
-    { to: '/dashboard', label: 'Dashboard', icon: iconeDashboard },
     { to: '/', label: 'Gerenciar Agenda', icon: iconeGerenciar },
-    { to: '/usuarios', label: 'Usuários', icon: iconeUsuarios },
-    { to: '/catalogo', label: 'Catálogo', icon: iconeCatalogo },
     { to: '/fluxo-de-caixa', label: 'Fluxo de caixa', icon: iconeFluxoCaixa },
+    { to: '/dashboard', label: 'Dashboard', icon: iconeDashboard },
+    { to: '/catalogo', label: 'Catálogo', icon: iconeCatalogo },
+    { to: '/usuarios', label: 'Usuários', icon: iconeUsuarios },
     { to: '/relatorios', label: 'Relatórios', icon: iconeRelatorios },
     { to: '/configuracoes', label: 'Configurações', icon: iconeConfiguracoes },
   ];

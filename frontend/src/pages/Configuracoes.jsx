@@ -1,131 +1,48 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import AlertaTemporario from '../components/AlertaTemporario';
+import ModalConfirmacao from '../components/ModalConfirmacao';
+import { useLayouts } from '../context/LayoutContext';
 
-const abas = [
-  { id: 'geral', rotulo: 'Geral' },
-  { id: 'layout', rotulo: 'Layout' },
-  { id: 'profissionais', rotulo: 'Profissionais' },
+const abas = [{ id: 'geral', rotulo: 'Geral' }, { id: 'layout', rotulo: 'Layout' }, { id: 'profissionais', rotulo: 'Profissionais' }, { id: 'formas-pagamento', rotulo: 'Forma de Pagamento' }];
+const profissionalVazio = { nome: '', especialidade: '', telefone: '', intervalos: [] };
+const opcoesLayout = [
+  { id: 'classico', nome: 'Clássico' },
+  { id: 'oceano', nome: 'Oceano' },
+  { id: 'aurora', nome: 'Aurora' },
+  { id: 'noite', nome: 'Noite' },
 ];
 
 export default function Configuracoes() {
-  const [abaAtiva, setAbaAtiva] = useState('geral');
-  const [profissionais, setProfissionais] = useState([]);
-  const [formProfissional, setFormProfissional] = useState({ nome: '', especialidade: '', telefone: '' });
-  const [carregandoProfissionais, setCarregandoProfissionais] = useState(false);
-  const [salvandoProfissional, setSalvandoProfissional] = useState(false);
-  const [erro, setErro] = useState('');
-  const [mensagem, setMensagem] = useState('');
+  const { layouts, salvarLayouts } = useLayouts();
+  const [abaAtiva, setAbaAtiva] = useState('geral'); const [profissionais, setProfissionais] = useState([]); const [formasPagamento, setFormasPagamento] = useState([]);
+  const [profissionalEmEdicao, setProfissionalEmEdicao] = useState(null); const [modalProfissionalAberto, setModalProfissionalAberto] = useState(false); const [formProfissional, setFormProfissional] = useState(profissionalVazio); const [modalIntervaloAberto, setModalIntervaloAberto] = useState(false); const [novoIntervalo, setNovoIntervalo] = useState({ descricao: '', inicio: '', fim: '' }); const [profissionalParaExcluir, setProfissionalParaExcluir] = useState(null);
+  const [novaFormaPagamento, setNovaFormaPagamento] = useState(''); const [carregandoProfissionais, setCarregandoProfissionais] = useState(false); const [carregandoFormasPagamento, setCarregandoFormasPagamento] = useState(false); const [salvando, setSalvando] = useState(false); const [excluindo, setExcluindo] = useState(false); const [erro, setErro] = useState('');
+
+  async function carregarProfissionais() { setCarregandoProfissionais(true); setErro(''); try { const { data } = await api.get('/profissionais'); setProfissionais(data); } catch (err) { setErro(err.response?.data?.mensagem || 'Não foi possível carregar os profissionais.'); } finally { setCarregandoProfissionais(false); } }
+  async function carregarFormasPagamento() { setCarregandoFormasPagamento(true); setErro(''); try { const { data } = await api.get('/formas-pagamento'); setFormasPagamento(data); } catch (err) { setErro(err.response?.data?.mensagem || 'Não foi possível carregar as formas de pagamento.'); } finally { setCarregandoFormasPagamento(false); } }
+  useEffect(() => { if (abaAtiva === 'profissionais') carregarProfissionais(); if (abaAtiva === 'formas-pagamento') carregarFormasPagamento(); }, [abaAtiva]);
+
+  function abrirNovoProfissional() { setProfissionalEmEdicao(null); setFormProfissional(profissionalVazio); setErro(''); setModalProfissionalAberto(true); }
+  function abrirEdicaoProfissional(profissional) { setProfissionalEmEdicao(profissional); setFormProfissional({ nome: profissional.nome, especialidade: profissional.especialidade || '', telefone: profissional.telefone || '', intervalos: profissional.intervalos || [] }); setErro(''); setModalProfissionalAberto(true); }
+  function fecharModalProfissional() { if (salvando) return; setModalProfissionalAberto(false); setModalIntervaloAberto(false); setNovoIntervalo({ descricao: '', inicio: '', fim: '' }); }
+  function incluirIntervalo() { if (!novoIntervalo.descricao.trim() || !novoIntervalo.inicio || !novoIntervalo.fim || novoIntervalo.inicio >= novoIntervalo.fim) { setErro('Informe a descrição e um intervalo com horário inicial menor que o final.'); return; } setFormProfissional((anterior) => ({ ...anterior, intervalos: [...anterior.intervalos, novoIntervalo].sort((a, b) => a.inicio.localeCompare(b.inicio)) })); setNovoIntervalo({ descricao: '', inicio: '', fim: '' }); setModalIntervaloAberto(false); setErro(''); }
+  function removerIntervalo(indice) { setFormProfissional((anterior) => ({ ...anterior, intervalos: anterior.intervalos.filter((_, itemIndice) => itemIndice !== indice) })); }
+  async function salvarProfissional(evento) { evento.preventDefault(); setSalvando(true); setErro(''); try { if (profissionalEmEdicao) await api.put(`/profissionais/${profissionalEmEdicao.id}`, formProfissional); else await api.post('/profissionais', formProfissional); setModalProfissionalAberto(false); await carregarProfissionais(); } catch (err) { setErro(err.response?.data?.mensagem || 'Não foi possível salvar o profissional.'); } finally { setSalvando(false); } }
+  async function excluirProfissional() { if (!profissionalParaExcluir) return; setExcluindo(true); setErro(''); try { await api.delete(`/profissionais/${profissionalParaExcluir.id}`); setProfissionalParaExcluir(null); await carregarProfissionais(); } catch (err) { setErro(err.response?.data?.mensagem || 'Não foi possível excluir o profissional.'); } finally { setExcluindo(false); } }
+  async function cadastrarFormaPagamento(evento) { evento.preventDefault(); setSalvando(true); setErro(''); try { await api.post('/formas-pagamento', { nome: novaFormaPagamento }); setNovaFormaPagamento(''); await carregarFormasPagamento(); } catch (err) { setErro(err.response?.data?.mensagem || 'Não foi possível cadastrar a forma de pagamento.'); } finally { setSalvando(false); } }
+  async function selecionarLayout(tipo, valor) { setErro(''); try { await salvarLayouts({ ...layouts, [tipo]: valor }); } catch (err) { setErro(err.response?.data?.mensagem || 'Não foi possível salvar o layout.'); } }
+
   const abaSelecionada = abas.find((aba) => aba.id === abaAtiva);
-
-  async function carregarProfissionais() {
-    setCarregandoProfissionais(true);
-    setErro('');
-    try {
-      const { data } = await api.get('/profissionais');
-      setProfissionais(data);
-    } catch (err) {
-      setErro(err.response?.data?.mensagem || 'Não foi possível carregar os profissionais.');
-    } finally {
-      setCarregandoProfissionais(false);
-    }
-  }
-
-  useEffect(() => {
-    if (abaAtiva === 'profissionais') carregarProfissionais();
-  }, [abaAtiva]);
-
-  async function cadastrarProfissional(evento) {
-    evento.preventDefault();
-    setSalvandoProfissional(true);
-    setErro('');
-    setMensagem('');
-    try {
-      await api.post('/profissionais', formProfissional);
-      setFormProfissional({ nome: '', especialidade: '', telefone: '' });
-      setMensagem('Profissional cadastrado com sucesso.');
-      await carregarProfissionais();
-    } catch (err) {
-      setErro(err.response?.data?.mensagem || 'Não foi possível cadastrar o profissional.');
-    } finally {
-      setSalvandoProfissional(false);
-    }
-  }
-
-  return (
-    <div className="pagina pagina-configuracoes">
-      <header className="pagina-header">
-        <h1>Configurações</h1>
-        <p>Ajuste as preferências do seu negócio.</p>
-      </header>
-
-      <div className="configuracoes-abas" role="tablist" aria-label="Seções de configurações">
-        {abas.map((aba) => (
-          <button
-            key={aba.id}
-            id={`aba-configuracoes-${aba.id}`}
-            type="button"
-            role="tab"
-            className={`configuracoes-aba${abaAtiva === aba.id ? ' ativa' : ''}`}
-            aria-selected={abaAtiva === aba.id}
-            aria-controls={`painel-configuracoes-${aba.id}`}
-            tabIndex={abaAtiva === aba.id ? 0 : -1}
-            onClick={() => setAbaAtiva(aba.id)}
-          >
-            {aba.rotulo}
-          </button>
-        ))}
-      </div>
-
-      <section id={`painel-configuracoes-${abaAtiva}`} className="configuracoes-painel" role="tabpanel" aria-labelledby={`aba-configuracoes-${abaAtiva}`}>
-        {abaAtiva === 'profissionais' ? (
-          <>
-            <div className="configuracoes-painel-cabecalho">
-              <h2>Profissionais disponíveis</h2>
-              <p>Cadastre a equipe que poderá atender pelo sistema.</p>
-            </div>
-
-            <AlertaTemporario tipo="sucesso" mensagem={mensagem} />
-            <AlertaTemporario tipo="erro" mensagem={erro} />
-
-            <form className="card-profissional" onSubmit={cadastrarProfissional}>
-              <h3>Novo profissional</h3>
-              <div className="linha-form formulario-profissional">
-                <label>
-                  Nome
-                  <input value={formProfissional.nome} onChange={(evento) => setFormProfissional((anterior) => ({ ...anterior, nome: evento.target.value }))} maxLength="100" required />
-                </label>
-                <label>
-                  Especialidade
-                  <input value={formProfissional.especialidade} onChange={(evento) => setFormProfissional((anterior) => ({ ...anterior, especialidade: evento.target.value }))} placeholder="Ex.: Cabeleireiro(a)" maxLength="100" />
-                </label>
-                <label>
-                  Telefone
-                  <input value={formProfissional.telefone} onChange={(evento) => setFormProfissional((anterior) => ({ ...anterior, telefone: evento.target.value }))} inputMode="tel" maxLength="30" />
-                </label>
-                <button type="submit" disabled={salvandoProfissional}>{salvandoProfissional ? 'Cadastrando...' : 'Cadastrar profissional'}</button>
-              </div>
-            </form>
-
-            <div className="lista-profissionais" aria-label="Profissionais cadastrados">
-              <h3>Equipe cadastrada</h3>
-              {carregandoProfissionais ? <p>Carregando profissionais...</p> : profissionais.length > 0 ? profissionais.map((profissional) => (
-                <article className="card-profissional-item" key={profissional.id}>
-                  <div className="avatar-profissional" aria-hidden="true">{profissional.nome.charAt(0).toUpperCase()}</div>
-                  <div>
-                    <strong>{profissional.nome}</strong>
-                    {(profissional.especialidade || profissional.telefone) && <p>{[profissional.especialidade, profissional.telefone].filter(Boolean).join(' · ')}</p>}
-                  </div>
-                </article>
-              )) : <div className="aviso-vazio">Nenhum profissional cadastrado ainda.</div>}
-            </div>
-          </>
-        ) : (
-          <div className="aviso-vazio">
-            As configurações de <strong>{abaSelecionada.rotulo}</strong> serão disponibilizadas aqui.
-          </div>
-        )}
-      </section>
-    </div>
-  );
+  return <div className="pagina pagina-configuracoes">
+    <header className="pagina-header"><h1>Configurações</h1><p>Ajuste as preferências do seu negócio.</p></header>
+    <div className="configuracoes-abas" role="tablist" aria-label="Seções de configurações">{abas.map((aba) => <button key={aba.id} type="button" role="tab" className={`configuracoes-aba${abaAtiva === aba.id ? ' ativa' : ''}`} aria-selected={abaAtiva === aba.id} onClick={() => setAbaAtiva(aba.id)}>{aba.rotulo}</button>)}</div>
+    <section className="configuracoes-painel" role="tabpanel">
+      <AlertaTemporario tipo="erro" mensagem={erro} />
+      {abaAtiva === 'profissionais' ? <><div className="configuracoes-painel-cabecalho"><div><h2>Profissionais disponíveis</h2><p>Cadastre a equipe e os intervalos em que cada profissional não atende.</p></div><button type="button" onClick={abrirNovoProfissional}>+ Profissional</button></div><div className="lista-profissionais" aria-label="Profissionais cadastrados"><h3>Equipe cadastrada</h3>{carregandoProfissionais ? <p>Carregando profissionais...</p> : profissionais.length ? profissionais.map((profissional) => <article className="card-profissional-item" key={profissional.id}><div className="avatar-profissional">{profissional.nome.charAt(0).toUpperCase()}</div><div className="dados-profissional"><strong>{profissional.nome}</strong>{(profissional.especialidade || profissional.telefone) && <p>{[profissional.especialidade, profissional.telefone].filter(Boolean).join(' · ')}</p>}{profissional.intervalos?.length > 0 && <small>Intervalos: {profissional.intervalos.map((intervalo) => `${intervalo.descricao ? `${intervalo.descricao}: ` : ''}${intervalo.inicio} às ${intervalo.fim}`).join(', ')}</small>}</div><div className="acoes-profissional"><button type="button" className="botao-pequeno botao-secundario" onClick={() => abrirEdicaoProfissional(profissional)}>Editar</button><button type="button" className="botao-pequeno botao-perigo" onClick={() => setProfissionalParaExcluir(profissional)}>Excluir</button></div></article>) : <div className="aviso-vazio">Nenhum profissional cadastrado ainda.</div>}</div></> : abaAtiva === 'formas-pagamento' ? <><div className="configuracoes-painel-cabecalho"><h2>Formas de pagamento disponíveis</h2><p>Defina os meios que poderão ser usados para registrar os recebimentos.</p></div><form className="card-profissional formulario-forma-pagamento" onSubmit={cadastrarFormaPagamento}><h3>Nova forma de pagamento</h3><div className="linha-form"><label>Nome<input value={novaFormaPagamento} onChange={(e) => setNovaFormaPagamento(e.target.value)} placeholder="Ex.: Pix" maxLength="80" required /></label><button type="submit" disabled={salvando}>Cadastrar</button></div></form><div className="lista-profissionais"><h3>Meios cadastrados</h3>{carregandoFormasPagamento ? <p>Carregando formas de pagamento...</p> : formasPagamento.length ? formasPagamento.map((forma) => <div className="item-forma-pagamento" key={forma.id}>{forma.nome}</div>) : <div className="aviso-vazio">Nenhuma forma de pagamento cadastrada ainda.</div>}</div></> : abaAtiva === 'layout' ? <><div className="configuracoes-painel-cabecalho"><div><h2>Layouts do sistema</h2><p>Escolha visualmente, de forma independente, as áreas administrativa e cliente.</p></div></div><div className="grade-layouts">{[{ tipo: 'administrativo', titulo: 'Layout Administrativo', descricao: 'Gestor e colaborador' }, { tipo: 'cliente', titulo: 'Layout Cliente', descricao: 'Login e área do cliente' }].map((grupo) => <section className="coluna-layout" key={grupo.tipo}><h3>{grupo.titulo}</h3><p>{grupo.descricao}</p><div className="opcoes-layout">{opcoesLayout.map((opcao) => <button type="button" className={`opcao-layout layout-${opcao.id}${layouts[grupo.tipo] === opcao.id ? ' selecionado' : ''}`} key={opcao.id} onClick={() => selecionarLayout(grupo.tipo, opcao.id)} aria-pressed={layouts[grupo.tipo] === opcao.id}><span className="preview-layout"><i /><i /><i /></span><strong>{opcao.nome}</strong><small>{layouts[grupo.tipo] === opcao.id ? 'Selecionado' : 'Selecionar'}</small></button>)}</div></section>)}</div></> : <div className="aviso-vazio">As configurações de <strong>{abaSelecionada.rotulo}</strong> serão disponibilizadas aqui.</div>}
+    </section>
+    {modalProfissionalAberto && <div className="modal-fundo" onMouseDown={fecharModalProfissional}><form className="modal modal-profissional" onSubmit={salvarProfissional} onMouseDown={(e) => e.stopPropagation()}><div className="modal-cabecalho"><h2>{profissionalEmEdicao ? 'Editar profissional' : 'Novo profissional'}</h2><button type="button" className="modal-fechar" onClick={fecharModalProfissional} disabled={salvando}>×</button></div><label>Nome<input value={formProfissional.nome} onChange={(e) => setFormProfissional((anterior) => ({ ...anterior, nome: e.target.value }))} maxLength="100" required /></label><label>Especialidade<input value={formProfissional.especialidade} onChange={(e) => setFormProfissional((anterior) => ({ ...anterior, especialidade: e.target.value }))} maxLength="100" /></label><label>Telefone<input value={formProfissional.telefone} onChange={(e) => setFormProfissional((anterior) => ({ ...anterior, telefone: e.target.value }))} inputMode="tel" maxLength="30" /></label><div className="intervalos-profissional"><div><h3>Intervalos</h3><button type="button" className="botao-pequeno botao-secundario" onClick={() => { setErro(''); setModalIntervaloAberto(true); }}>+ Intervalo</button></div>{formProfissional.intervalos.length ? <div className="lista-intervalos">{formProfissional.intervalos.map((intervalo, indice) => <div key={`${intervalo.inicio}-${intervalo.fim}`}><span>{intervalo.descricao ? `${intervalo.descricao} · ` : ''}{intervalo.inicio} às {intervalo.fim}</span><button type="button" className="botao-remover-servico" onClick={() => removerIntervalo(indice)} aria-label={`Remover intervalo ${intervalo.inicio}`}>×</button></div>)}</div> : <p>Nenhum intervalo cadastrado.</p>}</div><div className="modal-acoes"><button type="button" className="botao-secundario" onClick={fecharModalProfissional} disabled={salvando}>Cancelar</button><button type="submit" disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar'}</button></div></form></div>}
+    {modalIntervaloAberto && <div className="modal-fundo modal-fundo-superior" onMouseDown={() => setModalIntervaloAberto(false)}><section className="modal modal-intervalo" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}><div className="modal-cabecalho"><h2>Novo intervalo</h2><button type="button" className="modal-fechar" onClick={() => setModalIntervaloAberto(false)}>×</button></div><label>Descrição<input value={novoIntervalo.descricao} onChange={(e) => setNovoIntervalo((anterior) => ({ ...anterior, descricao: e.target.value }))} placeholder="Ex.: Almoço" maxLength="80" required /></label><label>Horário inicial<input type="time" value={novoIntervalo.inicio} onChange={(e) => setNovoIntervalo((anterior) => ({ ...anterior, inicio: e.target.value }))} /></label><label>Horário final<input type="time" value={novoIntervalo.fim} onChange={(e) => setNovoIntervalo((anterior) => ({ ...anterior, fim: e.target.value }))} /></label><div className="modal-acoes"><button type="button" className="botao-secundario" onClick={() => setModalIntervaloAberto(false)}>Cancelar</button><button type="button" onClick={incluirIntervalo}>Adicionar intervalo</button></div></section></div>}
+    <ModalConfirmacao aberto={Boolean(profissionalParaExcluir)} titulo="Excluir profissional" mensagem={profissionalParaExcluir && <>Deseja excluir o profissional <strong>{profissionalParaExcluir.nome}</strong>?</>} textoConfirmar="Excluir profissional" carregando={excluindo} onCancelar={() => setProfissionalParaExcluir(null)} onConfirmar={excluirProfissional} />
+  </div>;
 }

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
@@ -11,6 +12,9 @@ import PaginaEmBreve from './pages/PaginaEmBreve';
 import Usuarios from './pages/Usuarios';
 import Catalogo from './pages/Catalogo';
 import Configuracoes from './pages/Configuracoes';
+import FluxoCaixa from './pages/FluxoCaixa';
+import Dashboard from './pages/Dashboard';
+import { LayoutProvider, useLayouts } from './context/LayoutContext';
 
 // Decide qual "página inicial" renderizar dentro do Layout, de acordo com o papel
 function PaginaInicial() {
@@ -18,9 +22,19 @@ function PaginaInicial() {
   return ['gestor', 'colaborador'].includes(usuario?.papel) ? <GestorAgenda /> : <ClienteAgenda />;
 }
 
+function AplicarLayout() {
+  const { usuario } = useAuth();
+  const { layouts } = useLayouts();
+  const layout = ['gestor', 'colaborador'].includes(usuario?.papel) ? layouts.administrativo : layouts.cliente;
+  useEffect(() => { document.body.dataset.layout = layout; }, [layout]);
+  return null;
+}
+
 export default function App() {
   return (
     <AuthProvider>
+      <LayoutProvider>
+      <AplicarLayout />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -39,7 +53,7 @@ export default function App() {
               path="dashboard"
               element={
                 <ProtectedRoute papeisPermitidos={['gestor']}>
-                  <PaginaEmBreve titulo="Dashboard" descricao="Visualize os principais indicadores do seu negócio." />
+                  <Dashboard />
                 </ProtectedRoute>
               }
             />
@@ -63,7 +77,7 @@ export default function App() {
               path="fluxo-de-caixa"
               element={
                 <ProtectedRoute papeisPermitidos={['gestor']}>
-                  <PaginaEmBreve titulo="Fluxo de caixa" descricao="Acompanhe as entradas e saídas financeiras." />
+                  <FluxoCaixa />
                 </ProtectedRoute>
               }
             />
@@ -94,6 +108,7 @@ export default function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </LayoutProvider>
     </AuthProvider>
   );
 }

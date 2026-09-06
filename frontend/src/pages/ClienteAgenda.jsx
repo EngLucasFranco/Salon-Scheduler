@@ -192,7 +192,7 @@ export default function ClienteAgenda() {
             Serviço desejado
             <select value={servicoEscolhido} onChange={(e) => setServicoEscolhido(e.target.value)}>
               <option value="">Selecione</option>
-              {servicosCatalogo.map((servico) => (
+              {servicosCatalogo.filter((servico) => servico.tipo !== 'produto').map((servico) => (
                 <option key={servico.id} value={servico.id} disabled={servicosSelecionados.some((item) => item.id === servico.id)}>
                   {servico.nome} ({servico.duracaoMinutos} min)
                 </option>

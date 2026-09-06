@@ -3,7 +3,7 @@ import api from '../api/axios';
 import AlertaTemporario from '../components/AlertaTemporario';
 import ModalConfirmacao from '../components/ModalConfirmacao';
 
-const formularioInicial = { nome: '', duracaoMinutos: 30 };
+const formularioInicial = { nome: '', tipo: 'servico', valor: '', duracaoMinutos: 30 };
 
 function formatarDuracao(minutos) {
   const horas = Math.floor(minutos / 60);
@@ -24,7 +24,7 @@ export default function Catalogo() {
   const [formEdicao, setFormEdicao] = useState(formularioInicial);
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
-  const [visualizacao, setVisualizacao] = useState('cards');
+  const [modalNovoAberto, setModalNovoAberto] = useState(false);
 
   async function carregarServicos() {
     setCarregando(true);
@@ -39,6 +39,24 @@ export default function Catalogo() {
   }
 
   useEffect(() => { carregarServicos(); }, []);
+  function renderizarItens(itens) {
+    return (
+      <div className="lista-servicos visualizacao-lista">
+        {itens.map((servico) => (
+          <div className="card-servico" key={servico.id}>
+            <div>
+              <strong>{servico.nome}</strong>
+              <span>{servico.tipo === 'produto' ? 'Produto' : formatarDuracao(servico.duracaoMinutos)} · R$ {Number(servico.valor || 0).toFixed(2).replace('.', ',')}</span>
+            </div>
+            <div className="acoes-servico">
+              <button type="button" className="botao-pequeno botao-secundario" onClick={() => abrirEdicao(servico)}>Editar</button>
+              <button type="button" className="botao-pequeno botao-perigo" onClick={() => setServicoParaExcluir(servico)}>Excluir</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   async function salvar(evento) {
     evento.preventDefault();
@@ -47,7 +65,7 @@ export default function Catalogo() {
     try {
       await api.post('/servicos', form);
       setForm(formularioInicial);
-      setMensagem('Serviço cadastrado com sucesso.');
+      setModalNovoAberto(false);
       await carregarServicos();
     } catch (err) {
       setErro(err.response?.data?.mensagem || 'Não foi possível cadastrar o serviço.');
@@ -58,7 +76,7 @@ export default function Catalogo() {
 
   function abrirEdicao(servico) {
     setServicoEmEdicao(servico);
-    setFormEdicao({ nome: servico.nome, duracaoMinutos: servico.duracaoMinutos });
+    setFormEdicao({ nome: servico.nome, tipo: servico.tipo || 'servico', valor: servico.valor ?? '', duracaoMinutos: servico.duracaoMinutos || 30 });
     setErro('');
   }
 
@@ -104,45 +122,17 @@ export default function Catalogo() {
       <AlertaTemporario tipo="sucesso" mensagem={mensagem} />
       <AlertaTemporario tipo="erro" mensagem={erro} />
 
-      <form className="card-cadastro-servico" onSubmit={salvar}>
-        <h2>Novo serviço</h2>
-        <div className="linha-form catalogo-form">
-          <label>
-            Nome do serviço
-            <input value={form.nome} onChange={(e) => setForm((anterior) => ({ ...anterior, nome: e.target.value }))} placeholder="Ex.: Corte feminino" maxLength="100" required />
-          </label>
-          <label>
-            Tempo de execução (minutos)
-            <input type="number" min="5" max="720" step="5" value={form.duracaoMinutos} onChange={(e) => setForm((anterior) => ({ ...anterior, duracaoMinutos: e.target.value }))} required />
-          </label>
-          <button type="submit" disabled={salvando}>{salvando ? 'Salvando...' : 'Cadastrar serviço'}</button>
-        </div>
-      </form>
+      <div className="card-cadastro-servico"><button type="button" onClick={() => { setForm({ ...formularioInicial, tipo: '' }); setModalNovoAberto(true); }}>+ Produto / Serviço</button></div>
+
+      {modalNovoAberto && <div className="modal-fundo"><form className="modal" onSubmit={salvar}><h2>Novo produto / serviço</h2><div className="tipo-catalogo"><label><input type="checkbox" checked={form.tipo === 'produto'} onChange={() => setForm((x) => ({ ...x, tipo: 'produto' }))} /> Produto</label><label><input type="checkbox" checked={form.tipo === 'servico'} onChange={() => setForm((x) => ({ ...x, tipo: 'servico' }))} /> Serviço</label></div>{form.tipo && <><label>Descrição<input value={form.nome} onChange={(e) => setForm((x) => ({ ...x, nome: e.target.value }))} required /></label><label>Valor<input type="number" min="0" step="0.01" value={form.valor} onChange={(e) => setForm((x) => ({ ...x, valor: e.target.value }))} required /></label>{form.tipo === 'servico' && <label>Tempo<input type="number" min="5" value={form.duracaoMinutos} onChange={(e) => setForm((x) => ({ ...x, duracaoMinutos: e.target.value }))} required /></label>}</>}<div className="modal-acoes"><button type="button" className="botao-secundario" onClick={() => setModalNovoAberto(false)}>Cancelar</button><button type="submit" disabled={!form.tipo || salvando}>Salvar</button></div></form></div>}
 
       <section className="lista-catalogo" aria-label="Serviços cadastrados">
-        <div className="cabecalho-lista-catalogo">
-          <h2>Serviços cadastrados</h2>
-          <div className="seletor-visualizacao" role="group" aria-label="Visualização dos serviços">
-            <button type="button" className={'botao-pequeno' + (visualizacao === 'cards' ? ' ativo' : ' botao-secundario')} aria-pressed={visualizacao === 'cards'} onClick={() => setVisualizacao('cards')}>Cards</button>
-            <button type="button" className={'botao-pequeno' + (visualizacao === 'lista' ? ' ativo' : ' botao-secundario')} aria-pressed={visualizacao === 'lista'} onClick={() => setVisualizacao('lista')}>Lista</button>
+        {carregando ? <p>Carregando catálogo...</p> : servicos.length > 0 ? (
+          <div className="grupos-catalogo">
+            <div className="grupo-catalogo"><h3>Serviços cadastrados</h3>{servicos.filter((item) => item.tipo !== 'produto').length ? renderizarItens(servicos.filter((item) => item.tipo !== 'produto')) : <p className="catalogo-vazio">Nenhum serviço cadastrado.</p>}</div>
+            <div className="grupo-catalogo"><h3>Produtos cadastrados</h3>{servicos.filter((item) => item.tipo === 'produto').length ? renderizarItens(servicos.filter((item) => item.tipo === 'produto')) : <p className="catalogo-vazio">Nenhum produto cadastrado.</p>}</div>
           </div>
-        </div>
-        {carregando ? <p>Carregando serviços...</p> : servicos.length > 0 ? (
-          <div className={'lista-servicos visualizacao-' + visualizacao}>
-            {servicos.map((servico) => (
-              <div className="card-servico" key={servico.id}>
-                <div>
-                  <strong>{servico.nome}</strong>
-                  <span>{formatarDuracao(servico.duracaoMinutos)}</span>
-                </div>
-                <div className="acoes-servico">
-                  <button type="button" className="botao-pequeno botao-secundario" onClick={() => abrirEdicao(servico)}>Editar</button>
-                  <button type="button" className="botao-pequeno botao-perigo" onClick={() => setServicoParaExcluir(servico)}>Excluir</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : <div className="aviso-vazio">Nenhum serviço cadastrado ainda.</div>}
+        ) : <div className="aviso-vazio">Nenhum produto ou serviço cadastrado ainda.</div>}
       </section>
 
       {servicoEmEdicao && (
@@ -156,10 +146,12 @@ export default function Catalogo() {
               Nome do serviço
               <input value={formEdicao.nome} onChange={(e) => setFormEdicao((anterior) => ({ ...anterior, nome: e.target.value }))} maxLength="100" required />
             </label>
-            <label>
+            <label>Tipo<select value={formEdicao.tipo} onChange={(e) => setFormEdicao((anterior) => ({ ...anterior, tipo: e.target.value }))}><option value="servico">Serviço</option><option value="produto">Produto</option></select></label>
+            <label>Valor<input type="number" min="0" step="0.01" value={formEdicao.valor} onChange={(e) => setFormEdicao((anterior) => ({ ...anterior, valor: e.target.value }))} required /></label>
+            {formEdicao.tipo === 'servico' && <label>
               Tempo de execução (minutos)
               <input type="number" min="5" max="720" step="5" value={formEdicao.duracaoMinutos} onChange={(e) => setFormEdicao((anterior) => ({ ...anterior, duracaoMinutos: e.target.value }))} required />
-            </label>
+            </label>}
             {erro && <div className="alerta-erro" role="alert">{erro}</div>}
             <div className="modal-acoes">
               <button type="button" className="botao-secundario" onClick={() => setServicoEmEdicao(null)} disabled={salvandoEdicao}>Cancelar</button>
@@ -171,9 +163,9 @@ export default function Catalogo() {
 
       <ModalConfirmacao
         aberto={Boolean(servicoParaExcluir)}
-        titulo="Excluir serviço"
-        mensagem={servicoParaExcluir && <>Deseja excluir o serviço <strong>{servicoParaExcluir.nome}</strong>?</>}
-        textoConfirmar="Excluir serviço"
+        titulo={servicoParaExcluir?.tipo === 'produto' ? 'Excluir produto' : 'Excluir serviço'}
+        mensagem={servicoParaExcluir && <>Deseja excluir {servicoParaExcluir.tipo === 'produto' ? 'o produto' : 'o serviço'} <strong>{servicoParaExcluir.nome}</strong>?</>}
+        textoConfirmar={servicoParaExcluir?.tipo === 'produto' ? 'Excluir Produto' : 'Excluir Serviço'}
         carregando={excluindo}
         onCancelar={() => setServicoParaExcluir(null)}
         onConfirmar={confirmarExclusao}
