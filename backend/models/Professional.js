@@ -12,6 +12,8 @@ const professionalSchema = new mongoose.Schema(
     especialidade: { type: String, trim: true, default: '' },
     telefone: { type: String, trim: true, default: '' },
     intervalos: { type: [intervalSchema], default: [] },
+    diasAtendimento: { type: [Number], default: [1, 2, 3, 4, 5, 6, 0] },
+    servicosExecutados: { type: [String], default: [] },
     criadoPor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }

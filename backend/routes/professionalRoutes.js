@@ -4,8 +4,9 @@ const ctrl = require('../controllers/professionalController');
 
 const router = express.Router();
 
-router.use(protect, authorize('gestor'));
+router.use(protect);
 router.get('/', ctrl.listar);
+router.use(authorize('gestor'));
 router.post('/', ctrl.criar);
 router.put('/:id', ctrl.atualizar);
 router.delete('/:id', ctrl.remover);

@@ -1,5 +1,5 @@
 const { randomUUID } = require('crypto');
-const { findAgenda, listAgendas, listServices, listProfessionals, saveAgenda, deleteAgenda, newSlot } = require('../config/store');
+const { findAgenda, listAgendas, listServices, listProfessionals, listUsers, getGeneralSettings, saveAgenda, deleteAgenda, newSlot } = require('../config/store');
 
 async function profissionalDaRequisicao(req, res) {
   const profissionalId = req.usuario.papel === 'colaborador' ? req.usuario.profissionalId : (req.body.profissionalId || req.query.profissionalId);
@@ -7,6 +7,17 @@ async function profissionalDaRequisicao(req, res) {
   const profissional = (await listProfessionals()).find((item) => String(item.id) === String(profissionalId));
   if (!profissional) { res.status(404).json({ mensagem: 'Profissional não encontrado.' }); return null; }
   return profissional;
+}
+
+async function agendaDaRequisicao(req, res) {
+  const profissional = await profissionalDaRequisicao(req, res);
+  if (!profissional) return null;
+  const agenda = await findAgenda(req.params.data, profissional.id);
+  if (!agenda) {
+    res.status(404).json({ mensagem: 'Agenda não encontrada.' });
+    return null;
+  }
+  return agenda;
 }
 
 function gerarHorarios(inicio, fim, intervalo) {
@@ -25,6 +36,14 @@ function gerarHorarios(inicio, fim, intervalo) {
   return horarios;
 }
 
+function datasDoPeriodo(data, periodo) {
+  const [ano, mes, dia] = (data || '').split('-').map(Number);
+  if (!Number.isInteger(ano) || !Number.isInteger(mes) || !Number.isInteger(dia)) return [];
+  const inicio = periodo === 'mes' ? new Date(Date.UTC(ano, mes - 1, 1)) : new Date(Date.UTC(ano, mes - 1, dia));
+  const quantidade = periodo === 'mes' ? new Date(Date.UTC(ano, mes, 0)).getUTCDate() : 7;
+  return Array.from({ length: quantidade }, (_, indice) => new Date(inicio.getTime() + indice * 86400000).toISOString().slice(0, 10));
+}
+
 function slotById(agenda, id) { return agenda.slots.find((slot) => String(slot._id) === String(id)); }
 function limparReserva(slot) {
   slot.status = 'disponivel'; slot.cliente = null; slot.clienteNome = ''; slot.servico = ''; slot.observacao = '';
@@ -33,6 +52,16 @@ function limparReserva(slot) {
 function falha(res, erro, mensagem) { console.error(erro); return res.status(500).json({ mensagem }); }
 
 function minutosHorario(horario) { const [hora, minuto] = horario.split(':').map(Number); return hora * 60 + minuto; }
+function hojeNoBrasil() {
+  const partes = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts();
+  const valor = (tipo) => partes.find((parte) => parte.type === tipo)?.value;
+  return `${valor('year')}-${valor('month')}-${valor('day')}`;
+}
+function adicionarDias(data, dias) {
+  const [ano, mes, dia] = data.split('-').map(Number);
+  const resultado = new Date(Date.UTC(ano, mes - 1, dia + dias));
+  return resultado.toISOString().slice(0, 10);
+}
 function horarioEmIntervalo(horario, intervalos) {
   const minutos = minutosHorario(horario);
   return (intervalos || []).some((intervalo) => minutos >= minutosHorario(intervalo.inicio) && minutos < minutosHorario(intervalo.fim));
@@ -52,11 +81,46 @@ function slotsConsecutivosDisponiveis(agenda, indiceInicial, quantidade, interva
   return selecionados;
 }
 
+async function servicosDaReserva(idsServicos) {
+  const ids = Array.isArray(idsServicos) ? idsServicos.map(String) : [];
+  if (!ids.length || new Set(ids).size !== ids.length) return null;
+  const catalogo = await listServices();
+  const servicos = ids.map((id) => catalogo.find((servico) => String(servico.id) === id));
+  return servicos.some((servico) => !servico || servico.tipo === 'produto') ? null : servicos;
+}
+
+function aplicarReserva(agenda, slot, servicos, cliente) {
+  const indiceInicial = agenda.slots.findIndex((item) => String(item._id) === String(slot._id));
+  const intervalo = intervaloAgenda(agenda, indiceInicial);
+  const duracaoMinutos = servicos.reduce((total, servico) => total + Number(servico.duracaoMinutos), 0);
+  const quantidade = Math.ceil(duracaoMinutos / intervalo);
+  const slots = slotsConsecutivosDisponiveis(agenda, indiceInicial, quantidade, intervalo);
+  if (!slots) return null;
+  const reservaId = randomUUID();
+  const resumo = servicos.map((servico) => servico.nome).join(', ');
+  slots.forEach((item, indice) => {
+    item.status = 'reservado'; item.cliente = cliente.id ? String(cliente.id) : null; item.clienteNome = cliente.nome;
+    item.servico = resumo; item.servicos = servicos; item.duracaoMinutos = duracaoMinutos;
+    item.reservaId = reservaId; item.reservaInicio = indice === 0; item.observacao = '';
+  });
+  return slots;
+}
+
 async function abrirAgenda(req, res) {
   try {
-    const { data, inicio, fim, intervalo } = req.body;
+    const { data, inicio, fim, intervalo, periodo = 'dia' } = req.body;
     const profissional = await profissionalDaRequisicao(req, res); if (!profissional) return;
     const horarios = gerarHorarios(inicio, fim, intervalo);
+    if (periodo !== 'dia') {
+      const diasAtendimento = profissional.diasAtendimento || [1, 2, 3, 4, 5, 6, 0];
+      const datas = datasDoPeriodo(data, periodo).filter((item) => diasAtendimento.includes(new Date(`${item}T00:00:00Z`).getUTCDay()));
+      if (!['semana', 'mes'].includes(periodo) || !datas.length || !horarios.length) return res.status(400).json({ mensagem: 'Informe dados válidos para abrir a agenda.' });
+      const existentes = await Promise.all(datas.map((item) => findAgenda(item, profissional.id)));
+      const indiceExistente = existentes.findIndex(Boolean);
+      if (indiceExistente >= 0) return res.status(409).json({ mensagem: `Já existe uma agenda para ${datas[indiceExistente]}.` });
+      const agendas = await Promise.all(datas.map((item) => saveAgenda({ data: item, profissionalId: profissional.id, profissionalNome: profissional.nome, aberta: true, intervalo: Number(intervalo), criadoPor: req.usuario.id, slots: horarios.map((horario) => ({ ...newSlot(horario), status: horarioEmIntervalo(horario, profissional.intervalos) ? 'bloqueado' : 'disponivel' })) })));
+      return res.status(201).json({ mensagem: `${agendas.length} agenda(s) aberta(s) com sucesso.`, agendas });
+    }
     if (!data || !Array.isArray(horarios) || horarios.length === 0) return res.status(400).json({ mensagem: 'Informe a data e ao menos um horário.' });
     let agenda = await findAgenda(data, profissional.id);
     if (agenda) return res.status(409).json({ mensagem: agenda.aberta ? 'Já existe uma agenda aberta para esta data.' : 'Já existe uma agenda fechada para esta data.' });
@@ -81,7 +145,7 @@ async function excluirAgenda(req, res) {
 
 async function removerSlot(req, res) {
   try {
-    const agenda = await findAgenda(req.params.data); if (!agenda) return res.status(404).json({ mensagem: 'Agenda não encontrada.' });
+    const agenda = await agendaDaRequisicao(req, res); if (!agenda) return;
     const slot = slotById(agenda, req.params.slotId); if (!slot) return res.status(404).json({ mensagem: 'Horário não encontrado.' });
     if (slot.status === 'reservado') return res.status(400).json({ mensagem: 'Não é possível remover um horário já reservado. Cancele a reserva primeiro.' });
     agenda.slots = agenda.slots.filter((item) => String(item._id) !== String(slot._id)); return res.json(await saveAgenda(agenda));
@@ -90,7 +154,7 @@ async function removerSlot(req, res) {
 
 async function bloquearSlot(req, res) {
   try {
-    const agenda = await findAgenda(req.params.data); if (!agenda) return res.status(404).json({ mensagem: 'Agenda não encontrada.' });
+    const agenda = await agendaDaRequisicao(req, res); if (!agenda) return;
     const slot = slotById(agenda, req.params.slotId); if (!slot) return res.status(404).json({ mensagem: 'Horário não encontrado.' });
     if (slot.status === 'reservado') return res.status(400).json({ mensagem: 'Este horário já está reservado por um cliente.' });
     slot.status = slot.status === 'bloqueado' ? 'disponivel' : 'bloqueado'; return res.json(await saveAgenda(agenda));
@@ -99,7 +163,7 @@ async function bloquearSlot(req, res) {
 
 async function cancelarReservaGestor(req, res) {
   try {
-    const agenda = await findAgenda(req.params.data); if (!agenda) return res.status(404).json({ mensagem: 'Agenda não encontrada.' });
+    const agenda = await agendaDaRequisicao(req, res); if (!agenda) return;
     const slot = slotById(agenda, req.params.slotId); if (!slot || slot.status !== 'reservado') return res.status(404).json({ mensagem: 'Reserva não encontrada.' });
     if (!slot.reservaId) limparReserva(slot);
     else agenda.slots.filter((item) => item.reservaId === slot.reservaId).forEach(limparReserva);
@@ -110,7 +174,7 @@ async function cancelarReservaGestor(req, res) {
 
 async function cancelarServicoReservaGestor(req, res) {
   try {
-    const agenda = await findAgenda(req.params.data); if (!agenda) return res.status(404).json({ mensagem: 'Agenda não encontrada.' });
+    const agenda = await agendaDaRequisicao(req, res); if (!agenda) return;
     const slot = slotById(agenda, req.params.slotId);
     if (!slot || !slot.reservaId || slot.status !== 'reservado') return res.status(404).json({ mensagem: 'Reserva não encontrada.' });
     const slotsReserva = agenda.slots.filter((item) => item.reservaId === slot.reservaId);
@@ -139,8 +203,20 @@ async function listarAgendasAbertas(req, res) {
   try {
     const agendas = await listAgendas(req.query.inicio, req.query.fim, req.query.profissionalId);
     // Clientes só precisam conhecer os dias que ainda aceitam reservas.
-    return res.json(agendas.filter((agenda) => agenda.aberta).map((agenda) => ({ data: agenda.data })));
+    const hoje = hojeNoBrasil();
+    const { antecedenciaDias } = await getGeneralSettings();
+    const limite = adicionarDias(hoje, antecedenciaDias);
+    return res.json(agendas.filter((agenda) => agenda.aberta && agenda.data >= hoje && agenda.data <= limite).map((agenda) => ({ data: agenda.data, profissionalId: agenda.profissionalId, profissionalNome: agenda.profissionalNome })));
   } catch (erro) { return falha(res, erro, 'Erro ao listar os dias com agenda aberta.'); }
+}
+
+async function listarClientes(req, res) {
+  try {
+    const clientes = (await listUsers())
+      .filter((usuario) => usuario.papel === 'cliente')
+      .map((usuario) => ({ id: String(usuario.id), nome: usuario.nome, telefone: usuario.telefone || '' }));
+    return res.json(clientes);
+  } catch (erro) { return falha(res, erro, 'Erro ao listar as clientes.'); }
 }
 
 async function listarPorData(req, res) {
@@ -156,28 +232,42 @@ async function listarPorData(req, res) {
 async function reservarSlot(req, res) {
   try {
     const profissional = await profissionalDaRequisicao(req, res); if (!profissional) return;
+    const { antecedenciaDias } = await getGeneralSettings();
+    if (req.params.data < hojeNoBrasil() || req.params.data > adicionarDias(hojeNoBrasil(), antecedenciaDias)) return res.status(400).json({ mensagem: 'Esta data está fora do período disponível para agendamento.' });
     const agenda = await findAgenda(req.params.data, profissional.id); if (!agenda || !agenda.aberta) return res.status(400).json({ mensagem: 'A agenda deste dia não está disponível.' });
     const slot = slotById(agenda, req.params.slotId); if (!slot) return res.status(404).json({ mensagem: 'Horário não encontrado.' });
-    const idsServicos = Array.isArray(req.body.servicos) ? req.body.servicos.map(String) : [];
-    if (!idsServicos.length || new Set(idsServicos).size !== idsServicos.length) return res.status(400).json({ mensagem: 'Selecione ao menos um serviço.' });
-    const catalogo = await listServices();
-    const servicos = idsServicos.map((id) => catalogo.find((servico) => String(servico.id) === id));
-    if (servicos.some((servico) => !servico || servico.tipo === 'produto')) return res.status(400).json({ mensagem: 'Um ou mais serviços selecionados não estão disponíveis.' });
-    const indiceInicial = agenda.slots.findIndex((item) => String(item._id) === String(slot._id));
-    const intervalo = intervaloAgenda(agenda, indiceInicial);
-    const duracaoMinutos = servicos.reduce((total, servico) => total + Number(servico.duracaoMinutos), 0);
-    const quantidade = Math.ceil(duracaoMinutos / intervalo);
-    const slots = slotsConsecutivosDisponiveis(agenda, indiceInicial, quantidade, intervalo);
+    const servicos = await servicosDaReserva(req.body.servicos);
+    if (!servicos) return res.status(400).json({ mensagem: 'Selecione ao menos um serviço disponível.' });
+    const slots = aplicarReserva(agenda, slot, servicos, { id: req.usuario.id, nome: req.usuario.nome });
     if (!slots) return res.status(409).json({ mensagem: 'Indisponibilidade de horário.' });
-    const reservaId = randomUUID();
-    const resumo = servicos.map((servico) => servico.nome).join(', ');
-    slots.forEach((item, indice) => {
-      item.status = 'reservado'; item.cliente = req.usuario.id; item.clienteNome = req.usuario.nome;
-      item.servico = resumo; item.servicos = servicos; item.duracaoMinutos = duracaoMinutos;
-      item.reservaId = reservaId; item.reservaInicio = indice === 0; item.observacao = '';
-    });
     const saved = await saveAgenda(agenda); return res.json({ mensagem: 'Horário reservado com sucesso!', slot: slotById(saved, slot._id) || slot });
   } catch (erro) { return falha(res, erro, 'Erro ao reservar horário.'); }
+}
+
+async function marcarHorarioParaCliente(req, res) {
+  try {
+    const profissional = await profissionalDaRequisicao(req, res); if (!profissional) return;
+    const agenda = await findAgenda(req.params.data, profissional.id);
+    if (!agenda || !agenda.aberta) return res.status(400).json({ mensagem: 'A agenda deste dia não está disponível.' });
+    const slot = slotById(agenda, req.params.slotId); if (!slot) return res.status(404).json({ mensagem: 'Horário não encontrado.' });
+    const servicos = await servicosDaReserva(req.body.servicos);
+    if (!servicos) return res.status(400).json({ mensagem: 'Selecione ao menos um serviço disponível.' });
+
+    let cliente;
+    if (req.body.clienteId) {
+      cliente = (await listUsers()).find((usuario) => usuario.papel === 'cliente' && String(usuario.id) === String(req.body.clienteId));
+      if (!cliente) return res.status(404).json({ mensagem: 'Cliente não encontrada.' });
+    } else {
+      const nome = req.body.clienteNome?.trim();
+      if (!nome) return res.status(400).json({ mensagem: 'Informe o nome da cliente.' });
+      cliente = { id: null, nome };
+    }
+
+    const slots = aplicarReserva(agenda, slot, servicos, cliente);
+    if (!slots) return res.status(409).json({ mensagem: 'Indisponibilidade de horário.' });
+    const saved = await saveAgenda(agenda);
+    return res.status(201).json({ mensagem: 'Horário marcado com sucesso!', slot: slotById(saved, slot._id) || slot });
+  } catch (erro) { return falha(res, erro, 'Erro ao marcar horário para a cliente.'); }
 }
 
 async function minhasReservas(req, res) {
@@ -185,9 +275,39 @@ async function minhasReservas(req, res) {
     const agendas = await listAgendas();
     const reservas = agendas.flatMap((agenda) => agenda.slots
       .filter((slot) => slot.cliente && String(slot.cliente) === String(req.usuario.id) && (slot.reservaInicio || !slot.reservaId))
-      .map((slot) => ({ data: agenda.data, slotId: slot._id, horario: slot.horario, servico: slot.servico, servicos: slot.servicos || [], duracaoMinutos: slot.duracaoMinutos || 0, observacao: slot.observacao, status: slot.status })));
+      .map((slot) => ({ data: agenda.data, slotId: slot._id, horario: slot.horario, profissionalNome: agenda.profissionalNome || '', servico: slot.servico, servicos: slot.servicos || [], duracaoMinutos: slot.duracaoMinutos || 0, observacao: slot.observacao, status: slot.status })))
+      .sort((a, b) => `${b.data}T${b.horario}`.localeCompare(`${a.data}T${a.horario}`));
     return res.json(reservas);
   } catch (erro) { return falha(res, erro, 'Erro ao buscar suas reservas.'); }
 }
 
-module.exports = { abrirAgenda, fecharAgenda, excluirAgenda, removerSlot, bloquearSlot, cancelarReservaGestor, cancelarServicoReservaGestor, listarAgendaCompleta, listarAgendasAbertas, listarPorData, reservarSlot, minhasReservas };
+async function excluirMinhaReserva(req, res) {
+  try {
+    if (req.params.data >= hojeNoBrasil()) return res.status(400).json({ mensagem: 'Apenas reservas de datas passadas podem ser excluídas da lista.' });
+    const agenda = (await listAgendas()).find((item) => item.data === req.params.data && slotById(item, req.params.slotId));
+    const slot = agenda && slotById(agenda, req.params.slotId);
+    if (!slot || !slot.cliente || String(slot.cliente) !== String(req.usuario.id)) return res.status(404).json({ mensagem: 'Reserva não encontrada.' });
+
+    if (slot.reservaId) agenda.slots.filter((item) => item.reservaId === slot.reservaId).forEach(limparReserva);
+    else limparReserva(slot);
+    await saveAgenda(agenda);
+    return res.json({ mensagem: 'Reserva excluída da lista.' });
+  } catch (erro) { return falha(res, erro, 'Erro ao excluir a reserva da lista.'); }
+}
+
+async function cancelarMinhaReserva(req, res) {
+  try {
+    const agenda = (await listAgendas()).find((item) => item.data === req.params.data && slotById(item, req.params.slotId));
+    const slot = agenda && slotById(agenda, req.params.slotId);
+    if (!slot || !slot.cliente || String(slot.cliente) !== String(req.usuario.id)) return res.status(404).json({ mensagem: 'Reserva não encontrada.' });
+    const inicioReserva = new Date(`${agenda.data}T${slot.horario}:00-03:00`);
+    const { limiteCancelamentoHoras } = await getGeneralSettings();
+    if (inicioReserva.getTime() <= Date.now() || inicioReserva.getTime() - Date.now() < limiteCancelamentoHoras * 60 * 60 * 1000) return res.status(400).json({ mensagem: `O cancelamento é permitido até ${limiteCancelamentoHoras} hora(s) antes do horário reservado.` });
+    if (slot.reservaId) agenda.slots.filter((item) => item.reservaId === slot.reservaId).forEach(limparReserva);
+    else limparReserva(slot);
+    await saveAgenda(agenda);
+    return res.json({ mensagem: 'Reserva cancelada com sucesso.' });
+  } catch (erro) { return falha(res, erro, 'Erro ao cancelar a reserva.'); }
+}
+
+module.exports = { abrirAgenda, fecharAgenda, excluirAgenda, removerSlot, bloquearSlot, cancelarReservaGestor, cancelarServicoReservaGestor, listarAgendaCompleta, listarAgendasAbertas, listarClientes, listarPorData, reservarSlot, marcarHorarioParaCliente, minhasReservas, excluirMinhaReserva, cancelarMinhaReserva };

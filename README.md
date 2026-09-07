@@ -33,3 +33,21 @@ Os usuários aceitam somente letras e números, com mínimo de 6 caracteres. A
 senha também tem mínimo de 6 caracteres.
 
 O guia de banco de dados e deploy está em [SETUP.md](./SETUP.md).
+
+## Armazenamento de senhas
+
+Cadastros e alterações de senha usam Argon2id no SQLite e no MongoDB, com
+64 MiB de memória, 3 iterações, paralelismo 4 e salt aleatório por senha.
+A configuração está centralizada em `backend/utils/password.js`, seguindo
+o [perfil de 64 MiB da RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html#section-4).
+Meça a latência e o consumo de memória sob logins simultâneos no servidor de produção.
+
+Hashes bcrypt existentes continuam válidos e são substituídos por Argon2id
+após um login bem-sucedido. O bcrypt é mantido apenas para essa compatibilidade.
+A inicialização do SQLite converte registros antigos em texto puro para Argon2id,
+preservando hashes já existentes. A migração durante o login não sobrescreve
+uma senha alterada simultaneamente.
+
+Execute `npm test --prefix backend` para validar hashing, autenticação, migração
+e persistência. Os testes usam SQLite temporário e simulam as operações do MongoDB,
+sem acessar o banco de produção.

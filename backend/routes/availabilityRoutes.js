@@ -8,12 +8,16 @@ router.use(protect); // todas as rotas de agenda exigem login
 
 // Rotas específicas do cliente (precisam vir antes de "/:data" genérica)
 router.get('/minhas-reservas', ctrl.minhasReservas);
+router.delete('/minhas-reservas/:data/slots/:slotId', ctrl.excluirMinhaReserva);
+router.patch('/minhas-reservas/:data/slots/:slotId/cancelar', ctrl.cancelarMinhaReserva);
 router.get('/abertas', ctrl.listarAgendasAbertas);
 router.post('/:data/slots/:slotId/reservar', ctrl.reservarSlot);
 
 // Rotas do gestor
 router.post('/', authorize('gestor', 'colaborador'), ctrl.abrirAgenda);
 router.get('/', authorize('gestor', 'colaborador'), ctrl.listarAgendaCompleta);
+router.get('/clientes', authorize('gestor', 'colaborador'), ctrl.listarClientes);
+router.post('/:data/slots/:slotId/marcar', authorize('gestor', 'colaborador'), ctrl.marcarHorarioParaCliente);
 router.patch('/:data/fechar', authorize('gestor', 'colaborador'), ctrl.fecharAgenda);
 router.delete('/:data', authorize('gestor', 'colaborador'), ctrl.excluirAgenda);
 router.delete('/:data/slots/:slotId', authorize('gestor', 'colaborador'), ctrl.removerSlot);

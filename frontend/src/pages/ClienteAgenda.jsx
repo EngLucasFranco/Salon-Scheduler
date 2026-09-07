@@ -6,6 +6,12 @@ function hoje() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function adicionarDias(data, dias) {
+  const [ano, mes, dia] = data.split('-').map(Number);
+  const resultado = new Date(ano, mes - 1, dia + Number(dias));
+  return `${resultado.getFullYear()}-${String(resultado.getMonth() + 1).padStart(2, '0')}-${String(resultado.getDate()).padStart(2, '0')}`;
+}
+
 function formatarDataAba(data) {
   return new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })
     .format(new Date(`${data}T00:00:00`))
@@ -25,6 +31,7 @@ export default function ClienteAgenda() {
   const [servicosCatalogo, setServicosCatalogo] = useState([]);
   const [servicosSelecionados, setServicosSelecionados] = useState([]);
   const [servicoEscolhido, setServicoEscolhido] = useState('');
+  const [configuracoesGerais, setConfiguracoesGerais] = useState({ antecedenciaDias: 3650, politicaCancelamento: '', mensagemConfirmacao: 'Horário marcado com sucesso!' });
 
   async function carregarAgenda(d) {
     setCarregando(true);
@@ -41,12 +48,9 @@ export default function ClienteAgenda() {
 
   async function carregarAgendasAbertas() {
     try {
-      const { data: agendas } = await api.get('/agenda/abertas', { params: { profissionalId } });
-      setAgendasAbertas(agendas);
-      setData((dataAtual) => {
-        if (agendas.some((agendaAberta) => agendaAberta.data === dataAtual)) return dataAtual;
-        return agendas.find((agendaAberta) => agendaAberta.data >= hoje())?.data || agendas[0]?.data || dataAtual;
-      });
+      const { data: agendas } = await api.get('/agenda/abertas');
+      const agendasFuturas = agendas.filter((agendaAberta) => agendaAberta.data >= hoje());
+      setAgendasAbertas(agendasFuturas);
     } catch (err) {
       setErro('NÃ£o foi possÃ­vel carregar os dias com agenda aberta.');
     }
@@ -71,13 +75,20 @@ export default function ClienteAgenda() {
 
   useEffect(() => {
     carregarServicos();
+    api.get('/configuracoes/geral').then(({ data }) => setConfiguracoesGerais(data)).catch(() => {});
     api.get('/profissionais').then(({ data }) => {
       setProfissionais(data);
-      if (data.length === 1) setProfissionalId(data[0].id);
     }).catch(() => setErro('Não foi possível carregar os profissionais.'));
   }, []);
 
-  useEffect(() => { if (profissionalId) carregarAgendasAbertas(); }, [profissionalId]);
+  useEffect(() => { carregarAgendasAbertas(); }, []);
+
+  useEffect(() => {
+    const agendasDoProfissional = agendasAbertas.filter((agendaAberta) => agendaAberta.profissionalId === profissionalId);
+    if (agendasDoProfissional.length && !agendasDoProfissional.some((agendaAberta) => agendaAberta.data === data)) {
+      setData(agendasDoProfissional.find((agendaAberta) => agendaAberta.data >= hoje())?.data || agendasDoProfissional[0].data);
+    }
+  }, [agendasAbertas, data, profissionalId]);
 
   function adicionarServico() {
     const servico = servicosCatalogo.find((item) => item.id === servicoEscolhido);
@@ -91,7 +102,7 @@ export default function ClienteAgenda() {
     setErro('');
     try {
       await api.post(`/agenda/${data}/slots/${slotSelecionado._id}/reservar`, { servicos: servicosSelecionados.map((servico) => servico.id), profissionalId });
-      setMensagem('Horário marcado com sucesso!');
+      setMensagem(configuracoesGerais.mensagemConfirmacao || 'Horário marcado com sucesso!');
       setSlotSelecionado(null);
       setServicosSelecionados([]);
       setServicoEscolhido('');
@@ -101,6 +112,11 @@ export default function ClienteAgenda() {
     }
   }
 
+  const agendasDoProfissional = agendasAbertas.filter((agendaAberta) => agendaAberta.profissionalId === profissionalId);
+  const profissionaisComAgendaAberta = profissionais.filter((profissional) => agendasAbertas.some((agendaAberta) => agendaAberta.profissionalId === profissional.id));
+  const profissionalSelecionada = profissionais.find((profissional) => profissional.id === profissionalId);
+  const servicosDaProfissional = servicosCatalogo.filter((servico) => servico.tipo !== 'produto' && profissionalSelecionada?.servicosExecutados?.includes(String(servico.id)));
+
   return (
     <div className="pagina">
       <header className="pagina-header">
@@ -108,28 +124,30 @@ export default function ClienteAgenda() {
         <p>Escolha um dia e marque seu horário.</p>
       </header>
 
-      {profissionais.length > 1 && (
-        <div className="seletor-data"><label>Profissional<select value={profissionalId} onChange={(e) => setProfissionalId(e.target.value)}><option value="">Selecione um profissional</option>{profissionais.map((profissional) => <option key={profissional.id} value={profissional.id}>{profissional.nome}</option>)}</select></label></div>
+      {profissionaisComAgendaAberta.length > 0 && (
+        <div className="seletor-data"><label>Profissional<select value={profissionalId} onChange={(e) => setProfissionalId(e.target.value)}><option value="">Selecione uma profissional</option>{profissionaisComAgendaAberta.map((profissional) => <option key={profissional.id} value={profissional.id}>{profissional.nome}</option>)}</select></label></div>
       )}
-      {!profissionais.length && <div className="aviso-vazio">Não há profissionais disponíveis para agendamento.</div>}
+      {!profissionaisComAgendaAberta.length && <div className="aviso-vazio">Não há profissionais com agenda aberta no momento.</div>}
+
+      {!profissionalId && profissionaisComAgendaAberta.length > 0 && <div className="aviso-vazio">Selecione uma profissional para visualizar os dias e horários disponíveis.</div>}
 
       {profissionalId && <>
 
       <div className="seletor-data">
         <label>
           Data
-          <input type="date" value={data} min={hoje()} onChange={(e) => setData(e.target.value)} />
+          <input type="date" value={data} min={hoje()} max={adicionarDias(hoje(), configuracoesGerais.antecedenciaDias)} onChange={(e) => setData(e.target.value)} />
         </label>
       </div>
 
       <section className="agendas-abertas" aria-label="Agendas abertas">
         <div className="agendas-abertas-cabecalho">
-          <strong>{agendasAbertas.length} {agendasAbertas.length === 1 ? 'dia com agenda aberta' : 'dias com agenda aberta'}</strong>
+          <strong>{agendasDoProfissional.length} {agendasDoProfissional.length === 1 ? 'dia com agenda aberta' : 'dias com agenda aberta'}</strong>
           <span>Selecione uma aba para visualizar o dia.</span>
         </div>
-        {agendasAbertas.length > 0 ? (
+        {agendasDoProfissional.length > 0 ? (
           <div className="sub-abas" role="tablist" aria-label="Dias com agenda aberta">
-            {agendasAbertas.map((item) => (
+            {agendasDoProfissional.map((item) => (
               <button
                 key={item.data}
                 type="button"
@@ -188,11 +206,12 @@ export default function ClienteAgenda() {
       {slotSelecionado && (
         <div className="painel-confirmacao">
           <h3>Confirmar horário {slotSelecionado.horario}</h3>
+          {configuracoesGerais.politicaCancelamento && <div className="politica-agendamento"><strong>Política de faltas e cancelamentos</strong><span>{configuracoesGerais.politicaCancelamento}</span></div>}
           <label>
             Serviço desejado
             <select value={servicoEscolhido} onChange={(e) => setServicoEscolhido(e.target.value)}>
               <option value="">Selecione</option>
-              {servicosCatalogo.filter((servico) => servico.tipo !== 'produto').map((servico) => (
+              {servicosDaProfissional.map((servico) => (
                 <option key={servico.id} value={servico.id} disabled={servicosSelecionados.some((item) => item.id === servico.id)}>
                   {servico.nome} ({servico.duracaoMinutos} min)
                 </option>

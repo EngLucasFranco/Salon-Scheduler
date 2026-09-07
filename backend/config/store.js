@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs');
-const bcrypt = require('bcryptjs');
+const { hashPassword, isPasswordHash } = require('../utils/password');
 const { randomUUID } = require('crypto');
 const { open } = require('sqlite');
 const sqlite3 = require('sqlite3');
@@ -61,6 +61,8 @@ async function sqlite() {
           especialidade TEXT,
           telefone TEXT,
           intervalos TEXT NOT NULL DEFAULT '[]',
+          dias_atendimento TEXT NOT NULL DEFAULT '[1,2,3,4,5,6,0]',
+          servicos_executados TEXT NOT NULL DEFAULT '[]',
           criado_por TEXT,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
@@ -114,6 +116,8 @@ async function sqlite() {
       if (!serviceColumns.some((column) => column.name === 'valor')) await db.exec('ALTER TABLE services ADD COLUMN valor REAL NOT NULL DEFAULT 0');
       const professionalColumns = await db.all('PRAGMA table_info(professionals)');
       if (!professionalColumns.some((column) => column.name === 'intervalos')) await db.exec("ALTER TABLE professionals ADD COLUMN intervalos TEXT NOT NULL DEFAULT '[]'");
+      if (!professionalColumns.some((column) => column.name === 'dias_atendimento')) await db.exec("ALTER TABLE professionals ADD COLUMN dias_atendimento TEXT NOT NULL DEFAULT '[1,2,3,4,5,6,0]'");
+      if (!professionalColumns.some((column) => column.name === 'servicos_executados')) await db.exec("ALTER TABLE professionals ADD COLUMN servicos_executados TEXT NOT NULL DEFAULT '[]'");
       const chargeColumns = await db.all('PRAGMA table_info(charges)');
       if (!chargeColumns.some((column) => column.name === 'desconto')) await db.exec('ALTER TABLE charges ADD COLUMN desconto REAL NOT NULL DEFAULT 0');
       if (!chargeColumns.some((column) => column.name === 'acrescimo')) await db.exec('ALTER TABLE charges ADD COLUMN acrescimo REAL NOT NULL DEFAULT 0');
@@ -129,8 +133,8 @@ async function sqlite() {
 async function ensureUserPasswordHashes(db) {
   const users = await db.all('SELECT id, senha FROM users');
   for (const user of users) {
-    if (!user.senha.startsWith('$2a$') && !user.senha.startsWith('$2b$') && !user.senha.startsWith('$2y$')) {
-      await db.run('UPDATE users SET senha = ? WHERE id = ?', await bcrypt.hash(user.senha, 10), user.id);
+    if (!isPasswordHash(user.senha)) {
+      await db.run('UPDATE users SET senha = ? WHERE id = ? AND senha = ?', await hashPassword(user.senha), user.id, user.senha);
     }
   }
 }
@@ -148,7 +152,7 @@ async function seedDevelopmentUsers(db) {
   for (const user of users) {
     const exists = await db.get('SELECT id FROM users WHERE login = ?', user.login);
     if (!exists) {
-      await db.run('INSERT INTO users (nome, login, telefone, senha, papel) VALUES (?, ?, ?, ?, ?)', user.nome, user.login, '', await bcrypt.hash(user.senha, 10), user.papel);
+      await db.run('INSERT INTO users (nome, login, telefone, senha, papel) VALUES (?, ?, ?, ?, ?)', user.nome, user.login, '', await hashPassword(user.senha), user.papel);
     }
   }
 }
@@ -179,7 +183,7 @@ async function createUser({ nome, login, telefone, senha, papel, profissionalId 
   const db = await sqlite();
   const result = await db.run(
     'INSERT INTO users (nome, login, telefone, senha, papel, profissional_id) VALUES (?, ?, ?, ?, ?, ?)',
-    nome, login.toLowerCase(), telefone || '', await bcrypt.hash(senha, 10), papel, profissionalId || ''
+    nome, login.toLowerCase(), telefone || '', await hashPassword(senha), papel, profissionalId || ''
   );
   return findUserById(result.lastID);
 }
@@ -208,7 +212,7 @@ async function updateUser(id, { nome, login, telefone, senha, papel, profissiona
   let sql = 'UPDATE users SET nome = ?, login = ?, telefone = ?, papel = ?, profissional_id = ?';
   if (senha) {
     sql += ', senha = ?';
-    values.push(await bcrypt.hash(senha, 10));
+    values.push(await hashPassword(senha));
   }
   sql += ' WHERE id = ?';
   values.push(id);
@@ -220,6 +224,18 @@ async function deleteUser(id) {
   if (usingMongo()) return Boolean(await User.findByIdAndDelete(id));
   const result = await (await sqlite()).run('DELETE FROM users WHERE id = ?', id);
   return result.changes > 0;
+}
+
+async function upgradeUserPassword(id, previousHash, password) {
+  const hash = await hashPassword(password);
+  // Atualiza só se a senha não mudou desde a autenticação, sem regravar o perfil.
+  if (usingMongo()) {
+    // updateOne não executa o hook de save; o valor já foi transformado em hash acima.
+    const result = await User.updateOne({ _id: id, senha: previousHash }, { $set: { senha: hash } });
+    return result.modifiedCount === 1;
+  }
+  const result = await (await sqlite()).run('UPDATE users SET senha = ? WHERE id = ? AND senha = ?', hash, id, previousHash);
+  return result.changes === 1;
 }
 
 function mapService(service) {
@@ -265,28 +281,30 @@ function mapProfessional(profissional) {
     especialidade: profissional.especialidade || '',
     telefone: profissional.telefone || '',
     intervalos: typeof profissional.intervalos === 'string' ? JSON.parse(profissional.intervalos) : (profissional.intervalos || []),
+    diasAtendimento: typeof profissional.diasAtendimento === 'string' ? JSON.parse(profissional.diasAtendimento) : (profissional.diasAtendimento || [1, 2, 3, 4, 5, 6, 0]),
+    servicosExecutados: typeof profissional.servicosExecutados === 'string' ? JSON.parse(profissional.servicosExecutados) : (profissional.servicosExecutados || []),
   };
 }
 
 async function listProfessionals() {
   if (usingMongo()) return (await Professional.find().sort({ nome: 1 })).map(mapProfessional);
-  return (await (await sqlite()).all('SELECT id, nome, especialidade, telefone, intervalos FROM professionals ORDER BY nome COLLATE NOCASE ASC')).map(mapProfessional);
+  return (await (await sqlite()).all('SELECT id, nome, especialidade, telefone, intervalos, dias_atendimento AS diasAtendimento, servicos_executados AS servicosExecutados FROM professionals ORDER BY nome COLLATE NOCASE ASC')).map(mapProfessional);
 }
 
-async function createProfessional({ nome, especialidade, telefone, intervalos, criadoPor }) {
-  if (usingMongo()) return mapProfessional(await Professional.create({ nome, especialidade, telefone, intervalos, criadoPor }));
+async function createProfessional({ nome, especialidade, telefone, intervalos, diasAtendimento, servicosExecutados, criadoPor }) {
+  if (usingMongo()) return mapProfessional(await Professional.create({ nome, especialidade, telefone, intervalos, diasAtendimento, servicosExecutados, criadoPor }));
   const id = randomUUID();
   await (await sqlite()).run(
-    'INSERT INTO professionals (id, nome, especialidade, telefone, intervalos, criado_por) VALUES (?, ?, ?, ?, ?, ?)',
-    id, nome, especialidade || '', telefone || '', JSON.stringify(intervalos || []), criadoPor || null
+    'INSERT INTO professionals (id, nome, especialidade, telefone, intervalos, dias_atendimento, servicos_executados, criado_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    id, nome, especialidade || '', telefone || '', JSON.stringify(intervalos || []), JSON.stringify(diasAtendimento || [1, 2, 3, 4, 5, 6, 0]), JSON.stringify(servicosExecutados || []), criadoPor || null
   );
-  return { id, nome, especialidade: especialidade || '', telefone: telefone || '', intervalos: intervalos || [] };
+  return { id, nome, especialidade: especialidade || '', telefone: telefone || '', intervalos: intervalos || [], diasAtendimento: diasAtendimento || [1, 2, 3, 4, 5, 6, 0], servicosExecutados: servicosExecutados || [] };
 }
 
-async function updateProfessional(id, { nome, especialidade, telefone, intervalos }) {
-  if (usingMongo()) return mapProfessional(await Professional.findByIdAndUpdate(id, { nome, especialidade, telefone, intervalos }, { new: true, runValidators: true }));
-  const result = await (await sqlite()).run('UPDATE professionals SET nome = ?, especialidade = ?, telefone = ?, intervalos = ? WHERE id = ?', nome, especialidade || '', telefone || '', JSON.stringify(intervalos || []), id);
-  return result.changes ? { id: String(id), nome, especialidade: especialidade || '', telefone: telefone || '', intervalos: intervalos || [] } : null;
+async function updateProfessional(id, { nome, especialidade, telefone, intervalos, diasAtendimento, servicosExecutados }) {
+  if (usingMongo()) return mapProfessional(await Professional.findByIdAndUpdate(id, { nome, especialidade, telefone, intervalos, diasAtendimento, servicosExecutados }, { new: true, runValidators: true }));
+  const result = await (await sqlite()).run('UPDATE professionals SET nome = ?, especialidade = ?, telefone = ?, intervalos = ?, dias_atendimento = ?, servicos_executados = ? WHERE id = ?', nome, especialidade || '', telefone || '', JSON.stringify(intervalos || []), JSON.stringify(diasAtendimento || [1, 2, 3, 4, 5, 6, 0]), JSON.stringify(servicosExecutados || []), id);
+  return result.changes ? { id: String(id), nome, especialidade: especialidade || '', telefone: telefone || '', intervalos: intervalos || [], diasAtendimento: diasAtendimento || [1, 2, 3, 4, 5, 6, 0], servicosExecutados: servicosExecutados || [] } : null;
 }
 
 async function deleteProfessional(id) {
@@ -359,6 +377,29 @@ async function saveLayoutSettings({ administrativo, cliente }) {
   await db.run("INSERT INTO app_settings (chave, valor) VALUES ('layout_administrativo', ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", administrativo);
   await db.run("INSERT INTO app_settings (chave, valor) VALUES ('layout_cliente', ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", cliente);
   return { administrativo, cliente };
+}
+
+async function getGeneralSettings() {
+  const padrao = { nomeEstabelecimento: '', telefoneEstabelecimento: '', enderecoEstabelecimento: '', horarioFuncionamento: '', antecedenciaDias: 3650, limiteCancelamentoHoras: 2, politicaCancelamento: '', mensagemConfirmacao: 'Horário marcado com sucesso!' };
+  const chaves = Object.keys(padrao).map((chave) => `geral_${chave}`);
+  const valor = (registros, chave) => registros.find((item) => item.chave === `geral_${chave}`)?.valor;
+  if (usingMongo()) {
+    const registros = await AppSetting.find({ chave: { $in: chaves } });
+    return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' ? Number(valor(registros, chave) || padrao[chave]) : valor(registros, chave) ?? padrao[chave]])) };
+  }
+  const registros = await (await sqlite()).all(`SELECT chave, valor FROM app_settings WHERE chave IN (${chaves.map(() => '?').join(', ')})`, chaves);
+  return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' ? Number(valor(registros, chave) || padrao[chave]) : valor(registros, chave) ?? padrao[chave]])) };
+}
+
+async function saveGeneralSettings(configuracoes) {
+  const valores = Object.entries(configuracoes);
+  if (usingMongo()) {
+    await Promise.all(valores.map(([chave, valor]) => AppSetting.findOneAndUpdate({ chave: `geral_${chave}` }, { valor: String(valor) }, { upsert: true, new: true, setDefaultsOnInsert: true })));
+    return configuracoes;
+  }
+  const db = await sqlite();
+  await Promise.all(valores.map(([chave, valor]) => db.run("INSERT INTO app_settings (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", `geral_${chave}`, String(valor))));
+  return configuracoes;
 }
 
 async function deleteAgenda(data, profissionalId) {
@@ -434,4 +475,4 @@ function newSlot(horario) {
   return usingMongo() ? { horario, status: 'disponivel' } : { _id: randomUUID(), horario, status: 'disponivel' };
 }
 
-module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, deleteUser, listServices, createService, updateService, deleteService, listProfessionals, createProfessional, updateProfessional, deleteProfessional, listPaymentMethods, createPaymentMethod, createCharge, listChargesByDate, findChargeByReservation, getLayoutSettings, saveLayoutSettings, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };
+module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, upgradeUserPassword, deleteUser, listServices, createService, updateService, deleteService, listProfessionals, createProfessional, updateProfessional, deleteProfessional, listPaymentMethods, createPaymentMethod, createCharge, listChargesByDate, findChargeByReservation, getLayoutSettings, saveLayoutSettings, getGeneralSettings, saveGeneralSettings, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };

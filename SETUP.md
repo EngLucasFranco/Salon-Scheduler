@@ -46,7 +46,6 @@ No projeto da API, cadastre em Production (e Preview, se desejar):
 MONGODB_URI
 DB_PROVIDER=mongodb
 JWT_SECRET
-JWT_EXPIRES_IN=7d
 MANAGER_INVITE_CODE
 CORS_ORIGIN=https://url-do-frontend.vercel.app
 ```

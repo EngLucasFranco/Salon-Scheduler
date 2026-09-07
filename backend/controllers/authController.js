@@ -1,11 +1,10 @@
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const { safeUser, findUserByLogin, createUser } = require('../config/store');
+const { verifyPassword, needsPasswordRehash } = require('../utils/password');
+const { safeUser, findUserByLogin, findUserById, createUser, upgradeUserPassword } = require('../config/store');
 
 function gerarToken(usuario) {
-  return jwt.sign({ id: usuario.id, papel: usuario.papel }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
-  });
+  // A validade da sessão é controlada pelo sessionStorage no navegador.
+  return jwt.sign({ id: usuario.id, papel: usuario.papel }, process.env.JWT_SECRET);
 }
 
 // POST /api/auth/registrar
@@ -39,13 +38,21 @@ async function login(req, res) {
   try {
     const { login, senha } = req.body;
 
-    if (!login || !senha) {
-      return res.status(400).json({ mensagem: 'Informe usuário e senha.' });
+    if (!login || !senha) return res.status(401).json({ mensagem: 'Usuário ou senha inválidos.' });
+
+    let usuario = await findUserByLogin(login);
+    if (!usuario || !(await verifyPassword(senha, usuario.senha))) {
+      return res.status(401).json({ mensagem: 'Usuário ou senha inválidos.' });
     }
 
-    const usuario = await findUserByLogin(login);
-    if (!usuario || !(await bcrypt.compare(senha, usuario.senha))) {
-      return res.status(401).json({ mensagem: 'Usuário ou senha inválidos.' });
+    if (needsPasswordRehash(usuario.senha)) {
+      const atualizado = await upgradeUserPassword(usuario.id, usuario.senha, senha);
+      if (!atualizado) {
+        usuario = await findUserById(usuario.id);
+        if (!usuario || !(await verifyPassword(senha, usuario.senha))) {
+          return res.status(401).json({ mensagem: 'Usuário ou senha inválidos.' });
+        }
+      }
     }
 
     const token = gerarToken(usuario);

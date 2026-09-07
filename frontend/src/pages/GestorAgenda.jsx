@@ -14,6 +14,13 @@ function formatarDataAba(data) {
     .replace('.', '');
 }
 
+function formatarTelefone(telefone) {
+  const numeros = String(telefone || '').replace(/\D/g, '');
+  if (numeros.length === 11) return `(${numeros.slice(0, 2)}) ${numeros.slice(2, 7)}-${numeros.slice(7)}`;
+  if (numeros.length === 10) return `(${numeros.slice(0, 2)}) ${numeros.slice(2, 6)}-${numeros.slice(6)}`;
+  return telefone || '';
+}
+
 // Gera uma lista de horários entre início e fim, com o intervalo dado (em minutos)
 function gerarHorarios(inicio, fim, intervaloMin) {
   const [horaInicio, minutoInicio] = inicio.split(':').map(Number);
@@ -43,6 +50,17 @@ export default function GestorAgenda() {
   const [mensagem, setMensagem] = useState('');
   const [confirmacao, setConfirmacao] = useState(null);
   const [confirmando, setConfirmando] = useState(false);
+  const [clientes, setClientes] = useState([]);
+  const [carregandoClientes, setCarregandoClientes] = useState(false);
+  const [pesquisaCliente, setPesquisaCliente] = useState('');
+  const [slotParaMarcar, setSlotParaMarcar] = useState(null);
+  const [clienteSelecionada, setClienteSelecionada] = useState(null);
+  const [modalClienteAberto, setModalClienteAberto] = useState(false);
+  const [modalMarcacaoAberto, setModalMarcacaoAberto] = useState(false);
+  const [servicosCatalogo, setServicosCatalogo] = useState([]);
+  const [servicosSelecionados, setServicosSelecionados] = useState([]);
+  const [servicoEscolhido, setServicoEscolhido] = useState('');
+  const [marcandoHorario, setMarcandoHorario] = useState(false);
 
   const [modalAgendaAberto, setModalAgendaAberto] = useState(false);
   const [formAgenda, setFormAgenda] = useState({ data: hoje(), inicio: '09:00', fim: '18:00', intervalo: 30 });
@@ -88,11 +106,15 @@ export default function GestorAgenda() {
     if (profissionalId) carregarAgendasAbertas();
   }, [profissionalId]);
 
+  useEffect(() => {
+    api.get('/servicos').then(({ data }) => setServicosCatalogo(data)).catch(() => setErro('Não foi possível carregar os serviços disponíveis.'));
+  }, []);
+
   const agendasAbertas = agendas.filter((item) => item.aberta);
   const agendaSelecionadaExiste = agendas.some((item) => item.data === data);
 
   function abrirModalAgenda() {
-    setFormAgenda({ data, inicio: '09:00', fim: '18:00', intervalo: 30 });
+    setFormAgenda({ data, inicio: '09:00', fim: '18:00', intervalo: 30, periodo: 'dia' });
     setErro('');
     setModalAgendaAberto(true);
   }
@@ -111,10 +133,10 @@ export default function GestorAgenda() {
       return;
     }
     try {
-      await api.post('/agenda', { data: formAgenda.data, inicio: formAgenda.inicio, fim: formAgenda.fim, intervalo: formAgenda.intervalo, horarios, profissionalId });
+      const { data: resposta } = await api.post('/agenda', { data: formAgenda.data, inicio: formAgenda.inicio, fim: formAgenda.fim, intervalo: formAgenda.intervalo, periodo: formAgenda.periodo, horarios, profissionalId });
       setData(formAgenda.data);
       setModalAgendaAberto(false);
-      setMensagem('Agenda do dia aberta/atualizada com sucesso!');
+      setMensagem(resposta.mensagem || 'Agenda aberta com sucesso!');
       carregarAgenda(formAgenda.data);
       carregarAgendasAbertas();
     } catch (err) {
@@ -163,6 +185,82 @@ export default function GestorAgenda() {
       setErro(err.response?.data?.mensagem || 'Não foi possível bloquear/desbloquear.');
     }
   }
+
+  async function abrirSelecaoCliente(slot) {
+    setErro('');
+    setSlotParaMarcar(slot);
+    setClienteSelecionada(null);
+    setPesquisaCliente('');
+    setServicosSelecionados([]);
+    setServicoEscolhido('');
+    setModalClienteAberto(true);
+    setCarregandoClientes(true);
+    try {
+      const { data: listaClientes } = await api.get('/agenda/clientes');
+      setClientes(listaClientes);
+    } catch (err) {
+      setErro(err.response?.data?.mensagem || 'Não foi possível carregar as clientes.');
+      setModalClienteAberto(false);
+    } finally {
+      setCarregandoClientes(false);
+    }
+  }
+
+  function selecionarCliente(cliente) {
+    setClienteSelecionada(cliente);
+    setModalClienteAberto(false);
+    setModalMarcacaoAberto(true);
+  }
+
+  function adicionarServicoMarcacao() {
+    const servico = servicosCatalogo.find((item) => item.id === servicoEscolhido);
+    if (!servico) return;
+    setServicosSelecionados((anteriores) => [...anteriores, servico]);
+    setServicoEscolhido('');
+  }
+
+  function fecharMarcacao() {
+    if (marcandoHorario) return;
+    setModalClienteAberto(false);
+    setModalMarcacaoAberto(false);
+    setSlotParaMarcar(null);
+    setClienteSelecionada(null);
+    setServicosSelecionados([]);
+    setServicoEscolhido('');
+  }
+
+  async function confirmarMarcacao(evento) {
+    evento.preventDefault();
+    if (!slotParaMarcar || !clienteSelecionada || !servicosSelecionados.length) return;
+    if (!clienteSelecionada.id && !clienteSelecionada.nome.trim()) {
+      setErro('Informe o nome da cliente.');
+      return;
+    }
+    setMarcandoHorario(true);
+    setErro('');
+    try {
+      await api.post(`/agenda/${data}/slots/${slotParaMarcar._id}/marcar`, {
+        profissionalId,
+        clienteId: clienteSelecionada.id || undefined,
+        clienteNome: clienteSelecionada.id ? undefined : clienteSelecionada.nome.trim(),
+        servicos: servicosSelecionados.map((servico) => servico.id),
+      });
+      setMensagem(`Horário marcado para ${clienteSelecionada.nome}.`);
+      fecharMarcacao();
+      await carregarAgenda(data, true);
+    } catch (err) {
+      setErro(err.response?.data?.mensagem || 'Não foi possível marcar este horário.');
+    } finally {
+      setMarcandoHorario(false);
+    }
+  }
+
+  const normalizarPesquisa = (valor) => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+  const termoPesquisa = normalizarPesquisa(pesquisaCliente);
+  const termoTelefone = pesquisaCliente.replace(/\D/g, '');
+  const clientesFiltradas = clientes
+    .filter((cliente) => normalizarPesquisa(cliente.nome).includes(termoPesquisa) || (termoTelefone && String(cliente.telefone || '').replace(/\D/g, '').includes(termoTelefone)))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
 
   return (
     <div className="pagina">
@@ -268,6 +366,11 @@ export default function GestorAgenda() {
                     ))}
                   </>
                 )}
+                {agenda.aberta && slot.status === 'disponivel' && (
+                  <button className="botao-pequeno" onClick={() => abrirSelecaoCliente(slot)}>
+                    Marcar cliente
+                  </button>
+                )}
                 {slot.status !== 'reservado' && (
                   <button className="botao-pequeno" onClick={() => alternarBloqueio(slot)}>
                     {slot.status === 'bloqueado' ? 'Desbloquear' : 'Bloquear'}
@@ -286,6 +389,35 @@ export default function GestorAgenda() {
 
       {!carregando && (!agenda || !agenda.slots || agenda.slots.length === 0) && (
         <div className="aviso-vazio">Nenhum horário cadastrado para este dia ainda.</div>
+      )}
+
+      {modalClienteAberto && (
+        <div className="modal-fundo" role="presentation" onMouseDown={fecharMarcacao}>
+          <section className="modal modal-selecao-cliente" role="dialog" aria-modal="true" aria-labelledby="titulo-selecao-cliente" onMouseDown={(evento) => evento.stopPropagation()}>
+            <div className="modal-cabecalho"><h2 id="titulo-selecao-cliente">Selecionar cliente</h2><button type="button" className="modal-fechar" onClick={fecharMarcacao} aria-label="Fechar">×</button></div>
+            <p className="subtitulo">Marcação para {slotParaMarcar?.horario} em {data}.</p>
+            <label>Pesquisar cliente<input value={pesquisaCliente} onChange={(evento) => setPesquisaCliente(evento.target.value)} placeholder="Digite o nome ou telefone" autoFocus /></label>
+            <div className="lista-selecao-clientes" aria-label="Clientes disponíveis">
+              <button type="button" className="opcao-cliente outro" onClick={() => selecionarCliente({ id: null, nome: '' })}><strong>Outro</strong><small>Cliente sem cadastro no sistema</small></button>
+              {carregandoClientes ? <p>Carregando clientes...</p> : clientesFiltradas.length ? clientesFiltradas.map((cliente) => <button type="button" className="opcao-cliente" key={cliente.id} onClick={() => selecionarCliente(cliente)}><strong>{cliente.nome}{cliente.telefone && ` - ${formatarTelefone(cliente.telefone)}`}</strong></button>) : <p className="texto-suave">Nenhuma cliente encontrada.</p>}
+            </div>
+            <div className="modal-acoes"><button type="button" className="botao-secundario" onClick={fecharMarcacao}>Cancelar</button></div>
+          </section>
+        </div>
+      )}
+
+      {modalMarcacaoAberto && clienteSelecionada && (
+        <div className="modal-fundo" role="presentation" onMouseDown={fecharMarcacao}>
+          <form className="modal modal-marcacao-cliente" role="dialog" aria-modal="true" aria-labelledby="titulo-marcacao-cliente" onSubmit={confirmarMarcacao} onMouseDown={(evento) => evento.stopPropagation()}>
+            <div className="modal-cabecalho"><h2 id="titulo-marcacao-cliente">Marcar horário</h2><button type="button" className="modal-fechar" onClick={fecharMarcacao} disabled={marcandoHorario} aria-label="Fechar">×</button></div>
+            <p className="subtitulo">{data} às {slotParaMarcar?.horario}</p>
+            {clienteSelecionada.id ? <p className="cliente-selecionada"><strong>Cliente:</strong> {clienteSelecionada.nome}</p> : <label>Nome da cliente<input value={clienteSelecionada.nome} onChange={(evento) => setClienteSelecionada((anterior) => ({ ...anterior, nome: evento.target.value }))} placeholder="Informe o nome" maxLength="120" autoFocus required /></label>}
+            <label>Serviço<select value={servicoEscolhido} onChange={(evento) => setServicoEscolhido(evento.target.value)}><option value="">Selecione</option>{servicosCatalogo.filter((servico) => servico.tipo !== 'produto').map((servico) => <option key={servico.id} value={servico.id} disabled={servicosSelecionados.some((item) => item.id === servico.id)}>{servico.nome} ({servico.duracaoMinutos} min)</option>)}</select></label>
+            <button type="button" className="botao-secundario" onClick={adicionarServicoMarcacao} disabled={!servicoEscolhido}>Adicionar serviço</button>
+            {servicosSelecionados.length > 0 && <div className="servicos-selecionados"><strong>Serviços selecionados</strong>{servicosSelecionados.map((servico) => <div key={servico.id} className="servico-selecionado"><span>{servico.nome} · {servico.duracaoMinutos} min</span><button type="button" className="botao-remover-servico" onClick={() => setServicosSelecionados((anteriores) => anteriores.filter((item) => item.id !== servico.id))} aria-label={`Remover ${servico.nome}`}>×</button></div>)}<span className="duracao-total">Tempo total: {servicosSelecionados.reduce((total, servico) => total + servico.duracaoMinutos, 0)} min</span></div>}
+            <div className="modal-acoes"><button type="button" className="botao-secundario" onClick={fecharMarcacao} disabled={marcandoHorario}>Cancelar</button><button type="submit" disabled={marcandoHorario || !servicosSelecionados.length}>{marcandoHorario ? 'Marcando...' : 'Confirmar marcação'}</button></div>
+          </form>
+        </div>
       )}
 
       <ModalConfirmacao
@@ -321,6 +453,10 @@ export default function GestorAgenda() {
               Data da agenda
               <input type="date" min={hoje()} value={formAgenda.data} onChange={(e) => atualizarFormAgenda('data', e.target.value)} required />
             </label>
+            <fieldset className="seletor-periodo-agenda">
+              <legend>Abrir para</legend>
+              {[['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']].map(([valor, rotulo]) => <label key={valor} className={formAgenda.periodo === valor ? 'selecionado' : ''}><input type="radio" name="periodo-agenda" value={valor} checked={formAgenda.periodo === valor} onChange={(e) => atualizarFormAgenda('periodo', e.target.value)} /><span>{rotulo}</span></label>)}
+            </fieldset>
             <div className="linha-form linha-form-modal">
               <label>
                 Início

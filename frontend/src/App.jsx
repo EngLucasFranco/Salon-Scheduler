@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
@@ -26,7 +26,7 @@ function AplicarLayout() {
   const { usuario } = useAuth();
   const { layouts } = useLayouts();
   const layout = ['gestor', 'colaborador'].includes(usuario?.papel) ? layouts.administrativo : layouts.cliente;
-  useEffect(() => { document.body.dataset.layout = layout; }, [layout]);
+  useLayoutEffect(() => { document.body.dataset.layout = layout; }, [layout]);
   return null;
 }
 

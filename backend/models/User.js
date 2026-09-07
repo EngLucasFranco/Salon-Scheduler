@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const { hashPassword, verifyPassword } = require('../utils/password');
 
 const userSchema = new mongoose.Schema(
   {
@@ -17,15 +17,13 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-userSchema.pre('save', async function hashPassword(next) {
-  if (!this.isModified('senha')) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.senha = await bcrypt.hash(this.senha, salt);
-  next();
+userSchema.pre('save', async function protegerSenha() {
+  if (!this.isModified('senha')) return;
+  this.senha = await hashPassword(this.senha);
 });
 
 userSchema.methods.compararSenha = function compararSenha(senhaDigitada) {
-  return bcrypt.compare(senhaDigitada, this.senha);
+  return verifyPassword(senhaDigitada, this.senha);
 };
 
 userSchema.methods.toSafeObject = function toSafeObject() {

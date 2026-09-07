@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../api/axios';
 
 const iconeAgenda = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -65,6 +67,14 @@ const iconeSair = (
 
 export default function Sidebar() {
   const { usuario, logout } = useAuth();
+  const [nomeEstabelecimento, setNomeEstabelecimento] = useState('Salon Scheduler');
+
+  useEffect(() => {
+    const carregarNome = () => api.get('/configuracoes/geral').then(({ data }) => setNomeEstabelecimento(data.nomeEstabelecimento?.trim() || 'Salon Scheduler')).catch(() => setNomeEstabelecimento('Salon Scheduler'));
+    carregarNome();
+    window.addEventListener('configuracoes-gerais-atualizadas', carregarNome);
+    return () => window.removeEventListener('configuracoes-gerais-atualizadas', carregarNome);
+  }, []);
 
   const itensCliente = [
     { to: '/', label: 'Agenda Disponível', icon: iconeAgenda },
@@ -88,7 +98,7 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-topo">
-        <div className="logo-salao">💇 Agenda Salão</div>
+        <div className="logo-salao">💇 {nomeEstabelecimento}</div>
         {usuario && (
           <div className="sidebar-usuario">
             <div className="avatar">{usuario.nome?.charAt(0)?.toUpperCase()}</div>

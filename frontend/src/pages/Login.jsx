@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AlertaTemporario from '../components/AlertaTemporario';
+import api from '../api/axios';
 
 export default function Login() {
   const { login } = useAuth();
@@ -10,6 +11,11 @@ export default function Login() {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [nomeEstabelecimento, setNomeEstabelecimento] = useState('Salon Scheduler');
+
+  useEffect(() => {
+    api.get('/configuracoes/geral').then(({ data }) => setNomeEstabelecimento(data.nomeEstabelecimento?.trim() || 'Salon Scheduler')).catch(() => setNomeEstabelecimento('Salon Scheduler'));
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -28,19 +34,19 @@ export default function Login() {
   return (
     <div className="tela-auth">
       <form className="card-auth" onSubmit={handleSubmit}>
-        <h1>💇 Agenda Salão</h1>
+        <h1>💇 {nomeEstabelecimento}</h1>
         <p className="subtitulo">Entre para ver ou marcar seu horário</p>
 
         <AlertaTemporario tipo="erro" mensagem={erro} />
 
         <label>
           Usuário
-          <input value={loginUsuario} onChange={(e) => setLoginUsuario(e.target.value)} minLength={6} pattern="[A-Za-z0-9]+" autoComplete="username" required />
+          <input value={loginUsuario} onChange={(e) => setLoginUsuario(e.target.value)} autoComplete="username" required />
         </label>
 
         <label>
           Senha
-          <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} minLength={6} autoComplete="current-password" required />
+          <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} autoComplete="current-password" required />
         </label>
 
         <button type="submit" disabled={enviando}>
