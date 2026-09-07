@@ -12,9 +12,10 @@ export default function Login() {
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [nomeEstabelecimento, setNomeEstabelecimento] = useState('Salon Scheduler');
+  const [logomarca, setLogomarca] = useState('');
 
   useEffect(() => {
-    api.get('/configuracoes/geral').then(({ data }) => setNomeEstabelecimento(data.nomeEstabelecimento?.trim() || 'Salon Scheduler')).catch(() => setNomeEstabelecimento('Salon Scheduler'));
+    api.get('/configuracoes/geral').then(({ data }) => { setNomeEstabelecimento(data.nomeEstabelecimento?.trim() || 'Salon Scheduler'); setLogomarca(data.logomarca || ''); }).catch(() => setNomeEstabelecimento('Salon Scheduler'));
   }, []);
 
   async function handleSubmit(e) {
@@ -34,7 +35,7 @@ export default function Login() {
   return (
     <div className="tela-auth">
       <form className="card-auth" onSubmit={handleSubmit}>
-        <h1>💇 {nomeEstabelecimento}</h1>
+        <h1>{logomarca ? <img className="logo-login" src={logomarca} alt="Logomarca" /> : '💇'} {nomeEstabelecimento}</h1>
         <p className="subtitulo">Entre para ver ou marcar seu horário</p>
 
         <AlertaTemporario tipo="erro" mensagem={erro} />

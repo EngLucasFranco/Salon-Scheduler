@@ -68,9 +68,10 @@ const iconeSair = (
 export default function Sidebar() {
   const { usuario, logout } = useAuth();
   const [nomeEstabelecimento, setNomeEstabelecimento] = useState('Salon Scheduler');
+  const [logomarca, setLogomarca] = useState('');
 
   useEffect(() => {
-    const carregarNome = () => api.get('/configuracoes/geral').then(({ data }) => setNomeEstabelecimento(data.nomeEstabelecimento?.trim() || 'Salon Scheduler')).catch(() => setNomeEstabelecimento('Salon Scheduler'));
+    const carregarNome = () => api.get('/configuracoes/geral').then(({ data }) => { setNomeEstabelecimento(data.nomeEstabelecimento?.trim() || 'Salon Scheduler'); setLogomarca(data.logomarca || ''); }).catch(() => setNomeEstabelecimento('Salon Scheduler'));
     carregarNome();
     window.addEventListener('configuracoes-gerais-atualizadas', carregarNome);
     return () => window.removeEventListener('configuracoes-gerais-atualizadas', carregarNome);
@@ -98,7 +99,7 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-topo">
-        <div className="logo-salao">💇 {nomeEstabelecimento}</div>
+        <div className="logo-salao">{logomarca ? <img src={logomarca} alt="Logomarca" /> : '💇'} {nomeEstabelecimento}</div>
         {usuario && (
           <div className="sidebar-usuario">
             <div className="avatar">{usuario.nome?.charAt(0)?.toUpperCase()}</div>

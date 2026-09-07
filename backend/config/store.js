@@ -380,15 +380,16 @@ async function saveLayoutSettings({ administrativo, cliente }) {
 }
 
 async function getGeneralSettings() {
-  const padrao = { nomeEstabelecimento: '', telefoneEstabelecimento: '', enderecoEstabelecimento: '', horarioFuncionamento: '', antecedenciaDias: 3650, limiteCancelamentoHoras: 2, politicaCancelamento: '', mensagemConfirmacao: 'Horário marcado com sucesso!' };
+  const padrao = { nomeEstabelecimento: '', telefoneEstabelecimento: '', logomarca: '', enderecoEstabelecimento: '', horarioFuncionamento: '', antecedenciaDias: 3650, limiteCancelamentoHoras: 2, politicaCancelamento: '', mensagemConfirmacao: 'Horário marcado com sucesso!' };
   const chaves = Object.keys(padrao).map((chave) => `geral_${chave}`);
   const valor = (registros, chave) => registros.find((item) => item.chave === `geral_${chave}`)?.valor;
+  const numero = (registros, chave) => { const salvo = valor(registros, chave); return salvo === undefined ? padrao[chave] : salvo === '' ? null : Number(salvo); };
   if (usingMongo()) {
     const registros = await AppSetting.find({ chave: { $in: chaves } });
-    return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' ? Number(valor(registros, chave) || padrao[chave]) : valor(registros, chave) ?? padrao[chave]])) };
+    return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' ? numero(registros, chave) : valor(registros, chave) ?? padrao[chave]])) };
   }
   const registros = await (await sqlite()).all(`SELECT chave, valor FROM app_settings WHERE chave IN (${chaves.map(() => '?').join(', ')})`, chaves);
-  return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' ? Number(valor(registros, chave) || padrao[chave]) : valor(registros, chave) ?? padrao[chave]])) };
+  return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' ? numero(registros, chave) : valor(registros, chave) ?? padrao[chave]])) };
 }
 
 async function saveGeneralSettings(configuracoes) {

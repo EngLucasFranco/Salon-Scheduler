@@ -302,6 +302,7 @@ async function cancelarMinhaReserva(req, res) {
     if (!slot || !slot.cliente || String(slot.cliente) !== String(req.usuario.id)) return res.status(404).json({ mensagem: 'Reserva não encontrada.' });
     const inicioReserva = new Date(`${agenda.data}T${slot.horario}:00-03:00`);
     const { limiteCancelamentoHoras } = await getGeneralSettings();
+    if (limiteCancelamentoHoras === null) return res.status(400).json({ mensagem: 'O cancelamento de reservas não está disponível.' });
     if (inicioReserva.getTime() <= Date.now() || inicioReserva.getTime() - Date.now() < limiteCancelamentoHoras * 60 * 60 * 1000) return res.status(400).json({ mensagem: `O cancelamento é permitido até ${limiteCancelamentoHoras} hora(s) antes do horário reservado.` });
     if (slot.reservaId) agenda.slots.filter((item) => item.reservaId === slot.reservaId).forEach(limparReserva);
     else limparReserva(slot);

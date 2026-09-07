@@ -28,6 +28,7 @@ function situacaoReserva(data) {
 }
 
 function podeCancelarReserva(reserva, limiteCancelamentoHoras, agora) {
+  if (limiteCancelamentoHoras === null) return false;
   const [ano, mes, dia] = reserva.data.split('-').map(Number);
   const [hora, minuto] = reserva.horario.split(':').map(Number);
   const inicio = new Date(ano, mes - 1, dia, hora, minuto).getTime();
@@ -50,7 +51,7 @@ export default function MinhasReservas() {
     try {
       const [{ data: reservasCarregadas }, { data: configuracoes }] = await Promise.all([api.get('/agenda/minhas-reservas'), api.get('/configuracoes/geral')]);
       setReservas(reservasCarregadas);
-      setLimiteCancelamentoHoras(Number(configuracoes.limiteCancelamentoHoras || 0));
+      setLimiteCancelamentoHoras(configuracoes.limiteCancelamentoHoras === null ? null : Number(configuracoes.limiteCancelamentoHoras || 0));
     } catch (err) {
       setErro('Não foi possível carregar suas reservas.');
     } finally {
