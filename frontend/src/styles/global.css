@@ -392,7 +392,9 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .formulario-geral h2, .formulario-geral > label:nth-of-type(3), .formulario-geral > label:nth-of-type(4), .formulario-geral > label:nth-of-type(7), .formulario-geral > label:nth-of-type(8), .formulario-geral > button { grid-column:1 / -1; }
 .formulario-geral > label { display:flex; flex-direction:column; gap:6px; color:var(--cor-texto-suave); font-size:.85rem; font-weight:600; }
 .formulario-geral textarea { min-height:76px; resize:vertical; }
+.formulario-geral + .aviso-vazio { display:none; }
 .botao-salvar-configuracoes { transition:transform .12s ease, box-shadow .12s ease, background .15s; box-shadow:0 3px 0 var(--cor-primaria-escura); }
+.formulario-geral > .botao-salvar-configuracoes { justify-self:start; width:auto; }
 .botao-salvar-configuracoes:hover { transform:translateY(-1px); box-shadow:0 4px 0 var(--cor-primaria-escura); }
 .botao-salvar-configuracoes:active { transform:translateY(3px); box-shadow:0 0 0 var(--cor-primaria-escura); }
 .politica-agendamento { display:flex; flex-direction:column; gap:5px; padding:12px; border-radius:8px; background:var(--cor-fundo); color:var(--cor-texto-suave); font-size:.88rem; }
