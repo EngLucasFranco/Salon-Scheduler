@@ -14,6 +14,7 @@ import Catalogo from './pages/Catalogo';
 import Configuracoes from './pages/Configuracoes';
 import FluxoCaixa from './pages/FluxoCaixa';
 import Dashboard from './pages/Dashboard';
+import Relatorios from './pages/Relatorios';
 import { LayoutProvider, useLayouts } from './context/LayoutContext';
 
 // Decide qual "página inicial" renderizar dentro do Layout, de acordo com o papel
@@ -85,7 +86,7 @@ export default function App() {
               path="relatorios"
               element={
                 <ProtectedRoute papeisPermitidos={['gestor']}>
-                  <PaginaEmBreve titulo="Relatórios" descricao="Analise os resultados e a evolução do negócio." />
+                  <Relatorios />
                 </ProtectedRoute>
               }
             />

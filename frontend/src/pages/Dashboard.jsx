@@ -21,8 +21,9 @@ export default function Dashboard() {
     async function carregar() {
       setCarregando(true); setErro('');
       try {
-        const [cobrancasResposta, profissionaisResposta] = await Promise.all([api.get('/cobrancas', { params: { data } }), api.get('/profissionais')]);
-        setCobrancas(cobrancasResposta.data); setProfissionais(profissionaisResposta.data);
+        const cobrancasResposta = await api.get('/cobrancas', { params: { data } });
+        setCobrancas(cobrancasResposta.data);
+        api.get('/profissionais').then(({ data: lista }) => setProfissionais(lista)).catch(() => setProfissionais([]));
       } catch (err) { setErro(err.response?.data?.mensagem || 'Não foi possível carregar os indicadores.'); }
       finally { setCarregando(false); }
     }
@@ -52,6 +53,6 @@ export default function Dashboard() {
       <article className="dashboard-indicador indicador-claro"><span>Produtos vendidos</span><strong>{produtosVendidos}</strong><small>no período selecionado</small></article>
       <article className="dashboard-indicador indicador-claro"><span>Clientes atendidos</span><strong>{clientesAtendidos}</strong><small>clientes únicos</small></article>
     </section>
-    <section className="lista-cobrancas"><h2>Pagamentos Registrados</h2>{carregando ? <p>Carregando pagamentos...</p> : erro ? <div className="alerta-erro">{erro}</div> : cobrancasFiltradas.length ? cobrancasFiltradas.map((cobranca) => <article className="registro-cobranca" key={cobranca.id}><div><strong>{cobranca.clienteNome}</strong><span>{cobranca.itens.map((item) => `${item.quantidade}× ${item.nome}`).join(', ')}</span><small>{[cobranca.profissionalNome, meiosDaCobranca(cobranca).join(' + ')].filter(Boolean).join(' · ')}</small></div><strong>{moeda(cobranca.total)}</strong></article>) : <div className="aviso-vazio">Nenhum pagamento encontrado com os filtros selecionados.</div>}</section>
+    <section className="lista-cobrancas"><h2>Pagamentos Registrados</h2>{carregando ? <p>Carregando pagamentos...</p> : erro ? <div className="alerta-erro">{erro}</div> : cobrancasFiltradas.length ? cobrancasFiltradas.map((cobranca) => <article className="registro-cobranca" key={cobranca.id}><div><strong>{cobranca.clienteNome}</strong><span>{cobranca.itens.map((item) => `${item.quantidade}× ${item.nome}`).join(', ')}</span><small>{[cobranca.profissionalNome, meiosDaCobranca(cobranca).join(' + ')].filter(Boolean).join(' · ')}</small></div><strong>{moeda(cobranca.total)}</strong></article>) : <div className="aviso-vazio">Nenhum pagamento registrado.</div>}</section>
   </div>;
 }

@@ -351,6 +351,10 @@ async function listChargesByDate(data) {
   if (usingMongo()) return (await Charge.find({ data }).sort({ createdAt: -1 })).map(mapCharge);
   return (await (await sqlite()).all('SELECT * FROM charges WHERE data = ? ORDER BY created_at DESC', data)).map(mapCharge);
 }
+async function listChargesByPeriod(inicio, fim) {
+  if (usingMongo()) return (await Charge.find({ data: { $gte: inicio, $lte: fim } }).sort({ data: -1, createdAt: -1 })).map(mapCharge);
+  return (await (await sqlite()).all('SELECT * FROM charges WHERE data >= ? AND data <= ? ORDER BY data DESC, created_at DESC', inicio, fim)).map(mapCharge);
+}
 
 async function findChargeByReservation(reservaId) {
   if (!reservaId) return null;
@@ -476,4 +480,4 @@ function newSlot(horario) {
   return usingMongo() ? { horario, status: 'disponivel' } : { _id: randomUUID(), horario, status: 'disponivel' };
 }
 
-module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, upgradeUserPassword, deleteUser, listServices, createService, updateService, deleteService, listProfessionals, createProfessional, updateProfessional, deleteProfessional, listPaymentMethods, createPaymentMethod, createCharge, listChargesByDate, findChargeByReservation, getLayoutSettings, saveLayoutSettings, getGeneralSettings, saveGeneralSettings, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };
+module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, upgradeUserPassword, deleteUser, listServices, createService, updateService, deleteService, listPaymentMethods, createPaymentMethod, createCharge, listChargesByDate, listChargesByPeriod, findChargeByReservation, getLayoutSettings, saveLayoutSettings, getGeneralSettings, saveGeneralSettings, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };

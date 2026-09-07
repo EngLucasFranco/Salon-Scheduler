@@ -143,7 +143,7 @@ export default function ClienteAgenda() {
       <section className="agendas-abertas" aria-label="Agendas abertas">
         <div className="agendas-abertas-cabecalho">
           <strong>{agendasDoProfissional.length} {agendasDoProfissional.length === 1 ? 'dia com agenda aberta' : 'dias com agenda aberta'}</strong>
-          <span>Selecione uma aba para visualizar o dia.</span>
+          <span>Escolha o dia e horário desejado.</span>
         </div>
         {agendasDoProfissional.length > 0 ? (
           <div className="sub-abas" role="tablist" aria-label="Dias com agenda aberta">

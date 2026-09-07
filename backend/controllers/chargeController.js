@@ -1,4 +1,4 @@
-const { listAgendas, listServices, listPaymentMethods, listProfessionals, createCharge, listChargesByDate, findChargeByReservation } = require('../config/store');
+const { listAgendas, listServices, listPaymentMethods, listProfessionals, createCharge, listChargesByDate, listChargesByPeriod, findChargeByReservation } = require('../config/store');
 
 function erroServidor(res, erro, mensagem) { console.error(erro); return res.status(500).json({ mensagem }); }
 
@@ -30,6 +30,13 @@ async function listar(req, res) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data || '')) return res.status(400).json({ mensagem: 'Informe uma data válida.' });
     return res.json(await listChargesByDate(data));
   } catch (erro) { return erroServidor(res, erro, 'Erro ao listar as cobranças.'); }
+}
+
+async function relatorioFinanceiro(req, res) {
+  const { inicio, fim } = req.query;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio || '') || !/^\d{4}-\d{2}-\d{2}$/.test(fim || '') || inicio > fim) return res.status(400).json({ mensagem: 'Informe um período válido.' });
+  try { return res.json(await listChargesByPeriod(inicio, fim)); }
+  catch (erro) { return erroServidor(res, erro, 'Erro ao gerar relatório financeiro.'); }
 }
 
 async function criar(req, res) {
@@ -76,4 +83,4 @@ async function criar(req, res) {
   }
 }
 
-module.exports = { atendimentosDoDia, listar, criar };
+module.exports = { atendimentosDoDia, listar, criar, relatorioFinanceiro };
