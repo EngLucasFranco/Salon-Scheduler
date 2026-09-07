@@ -388,7 +388,8 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .botao-remover-servico { width: 24px; height: 24px; padding: 0; border-radius: 50%; background: #fee2e2; color: var(--cor-erro); font-size: 1.2rem; line-height: 1; }
 .botao-remover-servico:hover { background: #fecaca; }
 .duracao-total { color: var(--cor-texto-suave); font-weight: 600; }
-.formulario-geral { display:flex; flex-direction:column; gap:14px; }
+.formulario-geral { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; }
+.formulario-geral h2, .formulario-geral > label:nth-of-type(3), .formulario-geral > label:nth-of-type(4), .formulario-geral > label:nth-of-type(7), .formulario-geral > label:nth-of-type(8), .formulario-geral > button { grid-column:1 / -1; }
 .formulario-geral > label { display:flex; flex-direction:column; gap:6px; color:var(--cor-texto-suave); font-size:.85rem; font-weight:600; }
 .formulario-geral textarea { min-height:76px; resize:vertical; }
 .botao-salvar-configuracoes { transition:transform .12s ease, box-shadow .12s ease, background .15s; box-shadow:0 3px 0 var(--cor-primaria-escura); }
@@ -410,6 +411,11 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .adicionar-servico-profissional select { flex:1; min-width:0; }
 .lista-servicos-profissional { display:flex; flex-direction:column; gap:7px; margin-top:12px; }
 .lista-servicos-profissional > div { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border-radius:8px; background:var(--cor-superficie); font-size:.88rem; }
+
+@media (max-width: 640px) {
+  .formulario-geral { grid-template-columns:1fr; }
+  .formulario-geral > label, .formulario-geral > button { grid-column:1; }
+}
 .seletor-periodo-agenda { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin:4px 0 14px; padding:0; border:0; }
 .seletor-periodo-agenda legend { margin-bottom:7px; color:var(--cor-texto-suave); font-size:.85rem; font-weight:600; }
 .seletor-periodo-agenda label { cursor:pointer; }
