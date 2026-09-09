@@ -170,6 +170,21 @@ test('persistência SQLite e autenticação com migração de senhas', async (t)
     assert.equal(semNome.statusCode, 400);
   });
 
+  await t.test('configuração de agendas passadas mantém ou exclui após o prazo definido', async () => {
+    const { removerAgendasVencidas } = require('../utils/agendasVencidas');
+    const configuracoes = await store.getGeneralSettings();
+    const agenda = { data: '2000-01-01', profissionalId: 'limpeza-teste', profissionalNome: 'Profissional de limpeza', aberta: false, intervalo: 30, slots: [] };
+    await store.saveAgenda(agenda);
+
+    await store.saveGeneralSettings({ ...configuracoes, tratamentoAgendasPassadas: 'manter', diasVencimentoAgendas: 2 });
+    assert.equal(await removerAgendasVencidas(), 0);
+    assert.ok(await store.findAgenda(agenda.data, agenda.profissionalId));
+
+    await store.saveGeneralSettings({ ...configuracoes, tratamentoAgendasPassadas: 'excluir', diasVencimentoAgendas: 2 });
+    await removerAgendasVencidas();
+    assert.equal(await store.findAgenda(agenda.data, agenda.profissionalId), null);
+  });
+
   await t.test('reiniciar o armazenamento preserva os hashes Argon2id', async () => {
     const before = await db.all('SELECT id, senha FROM users ORDER BY id');
     await db.close();

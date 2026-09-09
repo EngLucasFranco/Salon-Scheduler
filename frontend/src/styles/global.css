@@ -26,6 +26,8 @@ body {
   min-width: 320px;
 }
 
+@media (max-width: 480px) { .card-notificacoes span { display:none; }.card-notificacoes { padding:11px; } }
+
 /* ---------- Layout com sidebar ---------- */
 .app-shell {
   display: flex;
@@ -124,6 +126,18 @@ body {
   max-width: 960px;
   width: 100%;
 }
+
+.area-notificacoes { display:flex; justify-content:center; margin:0 auto 20px; }
+.card-notificacoes { display:inline-flex; align-items:center; gap:9px; padding:11px 16px; border:1px solid var(--cor-borda); border-radius:999px; background:var(--cor-superficie); color:var(--cor-texto); font-weight:700; }
+.card-notificacoes.possui-nao-lidas { border-color:#d97706; background:#fffbeb; color:#92400e; }
+.card-notificacoes strong { min-width:22px; height:22px; display:grid; place-items:center; border-radius:50%; background:#d97706; color:#fff; font-size:.75rem; }
+.modal-notificacoes { width:min(620px, calc(100vw - 32px)); max-height:min(680px, calc(100dvh - 32px)); overflow:hidden; display:flex; flex-direction:column; }
+.lista-notificacoes { max-height:540px; overflow-y:auto; border-top:1px solid var(--cor-borda); }
+.lista-notificacoes > p { padding:0 16px; color:var(--cor-texto-suave); }
+.grupo-notificacoes-profissional + .grupo-notificacoes-profissional { border-top:8px solid var(--cor-fundo); }
+.grupo-notificacoes-profissional h3 { margin:0; padding:12px 16px; background:var(--cor-superficie-secundaria, var(--cor-fundo)); color:var(--cor-texto); font-size:.92rem; }
+.lista-notificacoes article { display:flex; justify-content:space-between; gap:14px; padding:14px 16px; border-bottom:1px solid var(--cor-borda); cursor:default; }
+.lista-notificacoes article:last-child { border-bottom:0; }.lista-notificacoes article.nao-lida { background:color-mix(in srgb, var(--cor-primaria) 10%, var(--cor-superficie)); }.lista-notificacoes p { margin:4px 0; color:var(--cor-texto-suave); font-size:.88rem; }.lista-notificacoes small { color:var(--cor-texto-suave); }.botao-excluir-notificacao { flex:0 0 auto; width:34px; height:34px; display:grid; place-items:center; padding:0; border-color:#fecaca; background:#fff1f2; color:#dc2626; }.botao-excluir-notificacao:hover { background:#dc2626; color:#fff; }
 
 /* ---------- Página / headers ---------- */
 .pagina-header { margin-bottom: 24px; }
@@ -315,6 +329,8 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .configuracoes-painel-cabecalho p { margin: 4px 0 0; color: var(--cor-texto-suave); }
 .card-profissional, .lista-profissionais { background: var(--cor-superficie); border: 1px solid var(--cor-borda); border-radius: var(--raio); padding: 18px 20px; }
 .card-profissional { margin-bottom: 18px; }
+.formulario-notificacoes { display:flex; flex-direction:column; gap:14px; max-width:620px; }.formulario-notificacoes h2 { margin:0; font-size:1.08rem; }.formulario-notificacoes p { margin:0; color:var(--cor-texto-suave); }.formulario-notificacoes label { display:flex; flex-direction:column; gap:6px; color:var(--cor-texto-suave); font-size:.88rem; font-weight:600; }.formulario-notificacoes textarea { min-height:100px; resize:vertical; }.formulario-notificacoes button { align-self:flex-start; }.mensagem-configuracao { color:var(--cor-sucesso) !important; }
+.configuracoes-painel:has(.formulario-notificacoes) > .aviso-vazio { display:none; }
 .card-profissional h3, .lista-profissionais h3 { margin-bottom: 16px; }
 .formulario-profissional { align-items: end; margin: 0; }
 .formulario-profissional label { flex: 1 1 180px; }
@@ -389,9 +405,15 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .botao-remover-servico { width: 24px; height: 24px; padding: 0; border-radius: 50%; background: #fee2e2; color: var(--cor-erro); font-size: 1.2rem; line-height: 1; }
 .botao-remover-servico:hover { background: #fecaca; }
 .duracao-total { color: var(--cor-texto-suave); font-weight: 600; }
-.formulario-geral { display:grid; grid-template-columns:minmax(240px, 1.5fr) minmax(150px, .8fr) minmax(150px, .7fr); gap:14px; }
-.formulario-geral h2, .formulario-geral > label:nth-of-type(4), .formulario-geral > label:nth-of-type(5), .formulario-geral > label:nth-of-type(8), .formulario-geral > label:nth-of-type(9), .formulario-geral > button { grid-column:1 / -1; }
+.formulario-geral { display:grid; grid-template-columns:repeat(4, minmax(130px, 1fr)); gap:14px; }
+.formulario-geral h2, .formulario-geral > label:nth-of-type(4), .formulario-geral > label:nth-of-type(5), .formulario-geral > label:nth-of-type(9), .formulario-geral > label:nth-of-type(n + 10), .formulario-geral > button { grid-column:1 / -1; }
 .formulario-geral > label { display:flex; flex-direction:column; gap:6px; color:var(--cor-texto-suave); font-size:.85rem; font-weight:600; }
+/* Os quatro controles de regras de agendamento compartilham uma única linha no desktop. */
+.formulario-geral > label:nth-of-type(8):has(+ label:nth-of-type(9) input[type="number"]) { grid-column:3; }
+.formulario-geral > label:nth-of-type(8):has(+ label:nth-of-type(9) input[type="number"]) + label:nth-of-type(9) { grid-column:4; }
+.formulario-geral > label:nth-of-type(n + 6):nth-of-type(-n + 9) { min-height:100px; position:relative; }
+.formulario-geral > label:nth-of-type(n + 6):nth-of-type(-n + 9) > input, .formulario-geral > label:nth-of-type(n + 6):nth-of-type(-n + 9) > select { margin-top:auto; }
+.formulario-geral > label:nth-of-type(9) > small { position:absolute; top:calc(100% + 4px); left:0; color:var(--cor-texto-suave); font-weight:400; }
 .campo-logomarca { cursor:pointer; }
 .campo-logomarca input { position:absolute; width:1px; height:1px; opacity:0; }
 .campo-logomarca::after { content:'Selecionar imagem'; width:max-content; padding:8px 10px; border:1px solid var(--cor-borda); border-radius:8px; background:var(--cor-fundo); color:var(--cor-primaria-escura); font-size:.82rem; }
@@ -425,6 +447,10 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 @media (max-width: 640px) {
   .formulario-geral { grid-template-columns:1fr; }
   .formulario-geral > label, .formulario-geral > button { grid-column:1; }
+  .formulario-geral > label:nth-of-type(8):has(+ label:nth-of-type(9) input[type="number"]), .formulario-geral > label:nth-of-type(8):has(+ label:nth-of-type(9) input[type="number"]) + label:nth-of-type(9) { grid-column:1; }
+  .formulario-geral > label:nth-of-type(n + 6):nth-of-type(-n + 9) { min-height:0; }
+  .formulario-geral > label:nth-of-type(n + 6):nth-of-type(-n + 9) > input, .formulario-geral > label:nth-of-type(n + 6):nth-of-type(-n + 9) > select { margin-top:0; }
+  .formulario-geral > label:nth-of-type(9) > small { position:static; }
 }
 .seletor-periodo-agenda { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin:4px 0 14px; padding:0; border:0; }
 .seletor-periodo-agenda legend { margin-bottom:7px; color:var(--cor-texto-suave); font-size:.85rem; font-weight:600; }
@@ -470,7 +496,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .card-reserva-futura-0 { background: #eef2ff; border-color: #a5b4fc; }
 .card-reserva-futura-1 { background: #ecfdf5; border-color: #86efac; }
 .card-reserva-futura-2 { background: #fff7ed; border-color: #fdba74; }
-.card-reserva-hoje {
+.card-reserva-hoje.card-reserva-pendente {
   border-color: #d946ef;
   box-shadow: 0 0 6px #f0abfc, 0 0 14px #e879f9, 0 0 24px rgba(217, 70, 239, 0.65);
   animation: brilho-reserva-hoje 1.8s ease-in-out infinite alternate;
@@ -482,7 +508,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card-reserva-hoje { animation: none; }
+  .card-reserva-hoje.card-reserva-pendente { animation: none; }
 }
 
 /* ---------- Gestor ---------- */

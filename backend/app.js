@@ -9,6 +9,8 @@ const professionalRoutes = require('./routes/professionalRoutes');
 const paymentMethodRoutes = require('./routes/paymentMethodRoutes');
 const chargeRoutes = require('./routes/chargeRoutes');
 const settingRoutes = require('./routes/settingRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const { removerAgendasVencidas } = require('./utils/agendasVencidas');
 
 const app = express();
 const allowedOrigins = (process.env.CORS_ORIGIN || '')
@@ -29,13 +31,16 @@ app.use(
     },
   })
 );
-app.use(express.json());
+// A logomarca é enviada como data URL (base64); o limite padrão de 100 KB
+// do Express rejeita PNGs comuns antes de a rota de configurações processá-los.
+app.use(express.json({ limit: '500kb' }));
 
 // Garante conexão com o banco antes de processar qualquer rota
 // (importante no ambiente serverless da Vercel, onde não há um "boot" fixo)
 app.use(async (req, res, next) => {
   try {
     await connectStore();
+    await removerAgendasVencidas();
     next();
   } catch (erro) {
     console.error('Falha ao conectar ao MongoDB:', erro.message);
@@ -55,6 +60,7 @@ app.use('/api/profissionais', professionalRoutes);
 app.use('/api/formas-pagamento', paymentMethodRoutes);
 app.use('/api/cobrancas', chargeRoutes);
 app.use('/api/configuracoes', settingRoutes);
+app.use('/api/notificacoes', notificationRoutes);
 
 // Handler genérico de erros
 app.use((err, req, res, next) => {

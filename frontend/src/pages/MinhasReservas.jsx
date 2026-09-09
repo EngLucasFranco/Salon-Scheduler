@@ -27,12 +27,19 @@ function situacaoReserva(data) {
   return 'hoje';
 }
 
-function podeCancelarReserva(reserva, limiteCancelamentoHoras, agora) {
-  if (limiteCancelamentoHoras === null) return false;
+function inicioReserva(reserva) {
   const [ano, mes, dia] = reserva.data.split('-').map(Number);
   const [hora, minuto] = reserva.horario.split(':').map(Number);
-  const inicio = new Date(ano, mes - 1, dia, hora, minuto).getTime();
-  return inicio - agora >= Number(limiteCancelamentoHoras) * 60 * 60 * 1000;
+  return new Date(ano, mes - 1, dia, hora, minuto).getTime();
+}
+
+function deveDestacarReservaHoje(reserva, agora) {
+  return situacaoReserva(reserva.data) === 'hoje' && inicioReserva(reserva) > agora;
+}
+
+function podeCancelarReserva(reserva, limiteCancelamentoHoras, agora) {
+  if (limiteCancelamentoHoras === null) return false;
+  return inicioReserva(reserva) - agora >= Number(limiteCancelamentoHoras) * 60 * 60 * 1000;
 }
 
 export default function MinhasReservas() {
@@ -64,8 +71,15 @@ export default function MinhasReservas() {
   }, []);
 
   useEffect(() => {
-    const atualizador = window.setInterval(() => setAgora(Date.now()), 60 * 1000);
-    return () => window.clearInterval(atualizador);
+    let atualizador;
+    const alinharAoProximoMinuto = window.setTimeout(() => {
+      setAgora(Date.now());
+      atualizador = window.setInterval(() => setAgora(Date.now()), 60 * 1000);
+    }, 60 * 1000 - (Date.now() % (60 * 1000)) + 10);
+    return () => {
+      window.clearTimeout(alinharAoProximoMinuto);
+      window.clearInterval(atualizador);
+    };
   }, []);
 
   async function excluirReservaPassada() {
@@ -117,8 +131,9 @@ export default function MinhasReservas() {
           {reservas.map((r, indice) => {
             const situacao = situacaoReserva(r.data);
             const corFutura = situacao === 'futura' ? ` card-reserva-futura-${indice % 3}` : '';
+            const destaqueHoje = deveDestacarReservaHoje(r, agora) ? ' card-reserva-pendente' : '';
             return (
-            <div key={r.slotId} className={`card-reserva card-reserva-${situacao}${corFutura}`}>
+            <div key={r.slotId} className={`card-reserva card-reserva-${situacao}${corFutura}${destaqueHoje}`}>
               <div>
                 <div className="card-reserva-data">{formatarData(r.data)} • {diaDaSemana(r.data)} • {r.horario}</div>
                 {(r.profissionalNome || r.servico) && <div className="card-reserva-servico">{[r.profissionalNome, r.servico].filter(Boolean).join(' - ')}</div>}

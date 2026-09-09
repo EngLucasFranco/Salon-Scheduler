@@ -12,6 +12,7 @@ const Professional = require('../models/Professional');
 const PaymentMethod = require('../models/PaymentMethod');
 const Charge = require('../models/Charge');
 const AppSetting = require('../models/AppSetting');
+const Notification = require('../models/Notification');
 
 let sqlitePromise;
 
@@ -94,6 +95,21 @@ async function sqlite() {
           chave TEXT PRIMARY KEY,
           valor TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS notifications (
+          id TEXT PRIMARY KEY,
+          tipo TEXT NOT NULL,
+          usuario_id TEXT NOT NULL DEFAULT '',
+          profissional_id TEXT NOT NULL DEFAULT '',
+          titulo TEXT NOT NULL,
+          mensagem TEXT NOT NULL,
+          data_reserva TEXT NOT NULL DEFAULT '',
+          horario_reserva TEXT NOT NULL DEFAULT '',
+          chave TEXT NOT NULL UNIQUE,
+          lida_por TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS notifications_usuario_idx ON notifications(usuario_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS notifications_profissional_idx ON notifications(profissional_id, created_at DESC);
       `);
       const columns = await db.all('PRAGMA table_info(users)');
       if (!columns.some((column) => column.name === 'profissional_id')) await db.exec("ALTER TABLE users ADD COLUMN profissional_id TEXT NOT NULL DEFAULT ''");
@@ -384,16 +400,16 @@ async function saveLayoutSettings({ administrativo, cliente }) {
 }
 
 async function getGeneralSettings() {
-  const padrao = { nomeEstabelecimento: '', telefoneEstabelecimento: '', logomarca: '', enderecoEstabelecimento: '', horarioFuncionamento: '', antecedenciaDias: 3650, limiteCancelamentoHoras: 2, politicaCancelamento: '', mensagemConfirmacao: 'Horário marcado com sucesso!' };
+  const padrao = { nomeEstabelecimento: '', telefoneEstabelecimento: '', logomarca: '', enderecoEstabelecimento: '', horarioFuncionamento: '', antecedenciaDias: 3650, limiteCancelamentoHoras: 2, tratamentoAgendasPassadas: 'manter', diasVencimentoAgendas: 30, politicaCancelamento: '', mensagemConfirmacao: 'Horário marcado com sucesso!' };
   const chaves = Object.keys(padrao).map((chave) => `geral_${chave}`);
   const valor = (registros, chave) => registros.find((item) => item.chave === `geral_${chave}`)?.valor;
   const numero = (registros, chave) => { const salvo = valor(registros, chave); return salvo === undefined ? padrao[chave] : salvo === '' ? null : Number(salvo); };
   if (usingMongo()) {
     const registros = await AppSetting.find({ chave: { $in: chaves } });
-    return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' ? numero(registros, chave) : valor(registros, chave) ?? padrao[chave]])) };
+    return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' || chave === 'diasVencimentoAgendas' ? numero(registros, chave) : valor(registros, chave) ?? padrao[chave]])) };
   }
   const registros = await (await sqlite()).all(`SELECT chave, valor FROM app_settings WHERE chave IN (${chaves.map(() => '?').join(', ')})`, chaves);
-  return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' ? numero(registros, chave) : valor(registros, chave) ?? padrao[chave]])) };
+  return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' || chave === 'diasVencimentoAgendas' ? numero(registros, chave) : valor(registros, chave) ?? padrao[chave]])) };
 }
 
 async function saveGeneralSettings(configuracoes) {
@@ -405,6 +421,74 @@ async function saveGeneralSettings(configuracoes) {
   const db = await sqlite();
   await Promise.all(valores.map(([chave, valor]) => db.run("INSERT INTO app_settings (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", `geral_${chave}`, String(valor))));
   return configuracoes;
+}
+
+const configuracoesNotificacaoPadrao = { horasAntecedenciaCliente: 2, mensagemCliente: 'Lembrete: você possui um horário agendado em breve.' };
+
+async function getNotificationSettings() {
+  const chaves = Object.keys(configuracoesNotificacaoPadrao).map((chave) => `notificacao_${chave}`);
+  const valor = (registros, chave) => registros.find((item) => item.chave === `notificacao_${chave}`)?.valor;
+  const registros = usingMongo() ? await AppSetting.find({ chave: { $in: chaves } }) : await (await sqlite()).all(`SELECT chave, valor FROM app_settings WHERE chave IN (${chaves.map(() => '?').join(', ')})`, chaves);
+  return { horasAntecedenciaCliente: Number(valor(registros, 'horasAntecedenciaCliente') ?? configuracoesNotificacaoPadrao.horasAntecedenciaCliente), mensagemCliente: valor(registros, 'mensagemCliente') ?? configuracoesNotificacaoPadrao.mensagemCliente };
+}
+
+async function saveNotificationSettings(configuracoes) {
+  const valores = Object.entries(configuracoes);
+  if (usingMongo()) { await Promise.all(valores.map(([chave, valor]) => AppSetting.findOneAndUpdate({ chave: `notificacao_${chave}` }, { valor: String(valor) }, { upsert: true, new: true, setDefaultsOnInsert: true }))); return configuracoes; }
+  const db = await sqlite();
+  await Promise.all(valores.map(([chave, valor]) => db.run("INSERT INTO app_settings (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", `notificacao_${chave}`, String(valor))));
+  return configuracoes;
+}
+
+function mapNotification(notificacao) {
+  if (!notificacao) return null;
+  return { id: String(notificacao._id || notificacao.id), tipo: notificacao.tipo, usuarioId: String(notificacao.usuarioId || notificacao.usuario_id || ''), profissionalId: String(notificacao.profissionalId || notificacao.profissional_id || ''), titulo: notificacao.titulo, mensagem: notificacao.mensagem, dataReserva: notificacao.dataReserva || notificacao.data_reserva || '', horarioReserva: notificacao.horarioReserva || notificacao.horario_reserva || '', chave: notificacao.chave, lidaPor: typeof notificacao.lidaPor === 'string' ? JSON.parse(notificacao.lidaPor) : (typeof notificacao.lida_por === 'string' ? JSON.parse(notificacao.lida_por) : (notificacao.lidaPor || notificacao.lida_por || [])), criadaEm: notificacao.createdAt || notificacao.created_at };
+}
+
+async function createNotification(notificacao) {
+  if (usingMongo()) return mapNotification(await Notification.findOneAndUpdate({ chave: notificacao.chave }, { $setOnInsert: notificacao }, { upsert: true, new: true }));
+  const id = randomUUID();
+  await (await sqlite()).run('INSERT OR IGNORE INTO notifications (id, tipo, usuario_id, profissional_id, titulo, mensagem, data_reserva, horario_reserva, chave) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', id, notificacao.tipo, notificacao.usuarioId || '', notificacao.profissionalId || '', notificacao.titulo, notificacao.mensagem, notificacao.dataReserva || '', notificacao.horarioReserva || '', notificacao.chave);
+  return mapNotification(await (await sqlite()).get('SELECT * FROM notifications WHERE chave = ?', notificacao.chave));
+}
+
+async function listNotificationsForUser(usuario) {
+  let notificacoes;
+  if (usingMongo()) {
+    const filtro = usuario.papel === 'gestor' ? { tipo: 'reserva-profissional' } : usuario.papel === 'colaborador' ? { tipo: 'reserva-profissional', profissionalId: String(usuario.profissionalId || '') } : { tipo: 'lembrete-cliente', usuarioId: String(usuario.id) };
+    notificacoes = (await Notification.find(filtro).sort({ createdAt: -1 }).limit(100)).map(mapNotification);
+  } else {
+    const sql = usuario.papel === 'gestor' ? "SELECT * FROM notifications WHERE tipo = 'reserva-profissional' ORDER BY created_at DESC LIMIT 100" : usuario.papel === 'colaborador' ? "SELECT * FROM notifications WHERE tipo = 'reserva-profissional' AND profissional_id = ? ORDER BY created_at DESC LIMIT 100" : "SELECT * FROM notifications WHERE tipo = 'lembrete-cliente' AND usuario_id = ? ORDER BY created_at DESC LIMIT 100";
+    const params = usuario.papel === 'gestor' ? [] : [String(usuario.papel === 'colaborador' ? usuario.profissionalId || '' : usuario.id)];
+    notificacoes = (await (await sqlite()).all(sql, params)).map(mapNotification);
+  }
+  const usuarioId = String(usuario.id);
+  // Somente o gestor precisa dos nomes: o colaborador continua recebendo
+  // exclusivamente notificações da agenda à qual está vinculado.
+  const nomesProfissionais = usuario.papel === 'gestor'
+    ? new Map((await listProfessionals()).map((profissional) => [String(profissional.id), profissional.nome]))
+    : new Map();
+  return notificacoes.map((notificacao) => ({
+    ...notificacao,
+    ...(usuario.papel === 'gestor' ? { profissionalNome: nomesProfissionais.get(notificacao.profissionalId) || 'Profissional removido' } : {}),
+    lida: notificacao.lidaPor.map(String).includes(usuarioId),
+  }));
+}
+
+async function markNotificationsAsRead(usuario, ids) {
+  const permitidas = new Set((await listNotificationsForUser(usuario)).map((notificacao) => notificacao.id));
+  const alvo = (ids || []).map(String).filter((id) => permitidas.has(id));
+  if (!alvo.length) return;
+  if (usingMongo()) return Notification.updateMany({ _id: { $in: alvo } }, { $addToSet: { lidaPor: String(usuario.id) } });
+  const db = await sqlite();
+  for (const id of alvo) { const registro = mapNotification(await db.get('SELECT * FROM notifications WHERE id = ?', id)); if (registro && !registro.lidaPor.map(String).includes(String(usuario.id))) await db.run('UPDATE notifications SET lida_por = ? WHERE id = ?', JSON.stringify([...registro.lidaPor, String(usuario.id)]), id); }
+}
+
+async function deleteNotificationForUser(usuario, id) {
+  const notificacao = (await listNotificationsForUser(usuario)).find((item) => String(item.id) === String(id));
+  if (!notificacao) return false;
+  if (usingMongo()) return Boolean(await Notification.findByIdAndDelete(id));
+  return Boolean((await (await sqlite()).run('DELETE FROM notifications WHERE id = ?', id)).changes);
 }
 
 async function deleteAgenda(data, profissionalId) {
@@ -480,4 +564,4 @@ function newSlot(horario) {
   return usingMongo() ? { horario, status: 'disponivel' } : { _id: randomUUID(), horario, status: 'disponivel' };
 }
 
-module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, upgradeUserPassword, deleteUser, listServices, createService, updateService, deleteService, listPaymentMethods, createPaymentMethod, createCharge, listChargesByDate, listChargesByPeriod, findChargeByReservation, getLayoutSettings, saveLayoutSettings, getGeneralSettings, saveGeneralSettings, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };
+module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, upgradeUserPassword, deleteUser, listServices, createService, updateService, deleteService, listProfessionals, createProfessional, updateProfessional, deleteProfessional, listPaymentMethods, createPaymentMethod, createCharge, listChargesByDate, listChargesByPeriod, findChargeByReservation, getLayoutSettings, saveLayoutSettings, getGeneralSettings, saveGeneralSettings, getNotificationSettings, saveNotificationSettings, createNotification, listNotificationsForUser, markNotificationsAsRead, deleteNotificationForUser, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };

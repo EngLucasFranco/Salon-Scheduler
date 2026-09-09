@@ -302,7 +302,7 @@ export default function GestorAgenda() {
       <section className="agendas-abertas" aria-label="Agendas abertas">
         <div className="agendas-abertas-cabecalho">
           <strong>{agendasAbertas.length} {agendasAbertas.length === 1 ? 'dia com agenda aberta' : 'dias com agenda aberta'}</strong>
-          <span>Selecione uma aba para visualizar o dia.</span>
+          <span>Selecione o dia desejado.</span>
         </div>
         {agendas.length > 0 ? (
           <div className="sub-abas" role="tablist" aria-label="Dias com agenda cadastrada">

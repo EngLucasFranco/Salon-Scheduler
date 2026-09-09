@@ -1,5 +1,5 @@
 const { randomUUID } = require('crypto');
-const { findAgenda, listAgendas, listServices, listProfessionals, listUsers, getGeneralSettings, saveAgenda, deleteAgenda, newSlot } = require('../config/store');
+const { findAgenda, listAgendas, listServices, listProfessionals, listUsers, getGeneralSettings, createNotification, saveAgenda, deleteAgenda, newSlot } = require('../config/store');
 
 async function profissionalDaRequisicao(req, res) {
   const profissionalId = req.usuario.papel === 'colaborador' ? req.usuario.profissionalId : (req.body.profissionalId || req.query.profissionalId);
@@ -104,6 +104,10 @@ function aplicarReserva(agenda, slot, servicos, cliente) {
     item.reservaId = reservaId; item.reservaInicio = indice === 0; item.observacao = '';
   });
   return slots;
+}
+
+async function notificarProfissionalSobreReserva(agenda, slot) {
+  await createNotification({ tipo: 'reserva-profissional', profissionalId: String(agenda.profissionalId), titulo: 'Nova reserva na agenda', mensagem: `${slot.clienteNome} marcou ${slot.servico} para ${agenda.data.split('-').reverse().join('/')} às ${slot.horario}.`, dataReserva: agenda.data, horarioReserva: slot.horario, chave: `reserva-profissional:${agenda.data}:${agenda.profissionalId}:${slot.reservaId || slot._id}` });
 }
 
 async function abrirAgenda(req, res) {
@@ -239,6 +243,7 @@ async function reservarSlot(req, res) {
     const servicos = await servicosDaReserva(req.body.servicos);
     if (!servicos) return res.status(400).json({ mensagem: 'Selecione ao menos um serviço disponível.' });
     const slots = aplicarReserva(agenda, slot, servicos, { id: req.usuario.id, nome: req.usuario.nome });
+    if (slots) await notificarProfissionalSobreReserva(agenda, slot);
     if (!slots) return res.status(409).json({ mensagem: 'Indisponibilidade de horário.' });
     const saved = await saveAgenda(agenda); return res.json({ mensagem: 'Horário reservado com sucesso!', slot: slotById(saved, slot._id) || slot });
   } catch (erro) { return falha(res, erro, 'Erro ao reservar horário.'); }
@@ -264,6 +269,7 @@ async function marcarHorarioParaCliente(req, res) {
     }
 
     const slots = aplicarReserva(agenda, slot, servicos, cliente);
+    if (slots) await notificarProfissionalSobreReserva(agenda, slot);
     if (!slots) return res.status(409).json({ mensagem: 'Indisponibilidade de horário.' });
     const saved = await saveAgenda(agenda);
     return res.status(201).json({ mensagem: 'Horário marcado com sucesso!', slot: slotById(saved, slot._id) || slot });
