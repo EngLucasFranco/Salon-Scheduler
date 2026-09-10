@@ -62,9 +62,17 @@ function adicionarDias(data, dias) {
   const resultado = new Date(Date.UTC(ano, mes - 1, dia + dias));
   return resultado.toISOString().slice(0, 10);
 }
-function horarioEmIntervalo(horario, intervalos) {
+function intervaloDoHorario(horario, intervalos) {
   const minutos = minutosHorario(horario);
-  return (intervalos || []).some((intervalo) => minutos >= minutosHorario(intervalo.inicio) && minutos < minutosHorario(intervalo.fim));
+  return (intervalos || []).find((intervalo) => minutos >= minutosHorario(intervalo.inicio) && minutos < minutosHorario(intervalo.fim));
+}
+function slotParaHorario(horario, intervalos) {
+  const intervalo = intervaloDoHorario(horario, intervalos);
+  return {
+    ...newSlot(horario),
+    status: intervalo ? 'bloqueado' : 'disponivel',
+    descricaoIntervalo: intervalo?.descricao?.trim() || '',
+  };
 }
 function intervaloAgenda(agenda, indice) {
   if (Number(agenda.intervalo) >= 5) return Number(agenda.intervalo);
@@ -122,13 +130,13 @@ async function abrirAgenda(req, res) {
       const existentes = await Promise.all(datas.map((item) => findAgenda(item, profissional.id)));
       const indiceExistente = existentes.findIndex(Boolean);
       if (indiceExistente >= 0) return res.status(409).json({ mensagem: `Já existe uma agenda para ${datas[indiceExistente]}.` });
-      const agendas = await Promise.all(datas.map((item) => saveAgenda({ data: item, profissionalId: profissional.id, profissionalNome: profissional.nome, aberta: true, intervalo: Number(intervalo), criadoPor: req.usuario.id, slots: horarios.map((horario) => ({ ...newSlot(horario), status: horarioEmIntervalo(horario, profissional.intervalos) ? 'bloqueado' : 'disponivel' })) })));
+      const agendas = await Promise.all(datas.map((item) => saveAgenda({ data: item, profissionalId: profissional.id, profissionalNome: profissional.nome, aberta: true, intervalo: Number(intervalo), criadoPor: req.usuario.id, slots: horarios.map((horario) => slotParaHorario(horario, profissional.intervalos)) })));
       return res.status(201).json({ mensagem: `${agendas.length} agenda(s) aberta(s) com sucesso.`, agendas });
     }
     if (!data || !Array.isArray(horarios) || horarios.length === 0) return res.status(400).json({ mensagem: 'Informe a data e ao menos um horário.' });
     let agenda = await findAgenda(data, profissional.id);
     if (agenda) return res.status(409).json({ mensagem: agenda.aberta ? 'Já existe uma agenda aberta para esta data.' : 'Já existe uma agenda fechada para esta data.' });
-    agenda = { data, profissionalId: profissional.id, profissionalNome: profissional.nome, aberta: true, intervalo: Number(intervalo), criadoPor: req.usuario.id, slots: horarios.map((horario) => ({ ...newSlot(horario), status: horarioEmIntervalo(horario, profissional.intervalos) ? 'bloqueado' : 'disponivel' })) };
+    agenda = { data, profissionalId: profissional.id, profissionalNome: profissional.nome, aberta: true, intervalo: Number(intervalo), criadoPor: req.usuario.id, slots: horarios.map((horario) => slotParaHorario(horario, profissional.intervalos)) };
     agenda.slots.sort((a, b) => a.horario.localeCompare(b.horario)); agenda.aberta = true;
     return res.status(201).json(await saveAgenda(agenda));
   } catch (erro) { return falha(res, erro, 'Erro ao abrir a agenda.'); }
@@ -161,7 +169,13 @@ async function bloquearSlot(req, res) {
     const agenda = await agendaDaRequisicao(req, res); if (!agenda) return;
     const slot = slotById(agenda, req.params.slotId); if (!slot) return res.status(404).json({ mensagem: 'Horário não encontrado.' });
     if (slot.status === 'reservado') return res.status(400).json({ mensagem: 'Este horário já está reservado por um cliente.' });
-    slot.status = slot.status === 'bloqueado' ? 'disponivel' : 'bloqueado'; return res.json(await saveAgenda(agenda));
+    if (slot.status === 'bloqueado') {
+      slot.status = 'disponivel';
+      slot.descricaoIntervalo = '';
+    } else {
+      slot.status = 'bloqueado';
+    }
+    return res.json(await saveAgenda(agenda));
   } catch (erro) { return falha(res, erro, 'Erro ao bloquear horário.'); }
 }
 
@@ -227,8 +241,10 @@ async function listarPorData(req, res) {
   try {
     const profissional = await profissionalDaRequisicao(req, res); if (!profissional) return;
     const agenda = await findAgenda(req.params.data, profissional.id); if (!agenda) return res.json({ data: req.params.data, aberta: false, slots: [] });
-    if (req.usuario.papel === 'gestor') return res.json(agenda);
-    const slots = agenda.slots.map((slot) => ({ _id: slot._id, horario: slot.horario, status: slot.status === 'bloqueado' ? 'indisponivel' : slot.status, minhaReserva: slot.cliente && String(slot.cliente) === String(req.usuario.id) }));
+    if (req.usuario.papel !== 'cliente') return res.json(agenda);
+    const slots = agenda.slots
+      .filter((slot) => !slot.descricaoIntervalo)
+      .map((slot) => ({ _id: slot._id, horario: slot.horario, status: slot.status === 'bloqueado' ? 'indisponivel' : slot.status, minhaReserva: slot.cliente && String(slot.cliente) === String(req.usuario.id) }));
     return res.json({ data: agenda.data, aberta: agenda.aberta, slots });
   } catch (erro) { return falha(res, erro, 'Erro ao buscar horários.'); }
 }

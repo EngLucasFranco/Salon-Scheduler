@@ -10,6 +10,7 @@ const slotSchema = new mongoose.Schema(
       enum: ['disponivel', 'reservado', 'bloqueado'],
       default: 'disponivel',
     },
+    descricaoIntervalo: { type: String, default: '' },
     servico: { type: String, default: '' },
     servicos: [{ id: String, nome: String, duracaoMinutos: Number }],
     duracaoMinutos: { type: Number, default: 0 },

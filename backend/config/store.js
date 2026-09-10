@@ -509,6 +509,7 @@ function normalizeAgenda(agenda) {
     criadoPor: raw.criadoPor ? String(raw.criadoPor) : null,
     slots: (raw.slots || []).map((slot) => ({
       _id: String(slot._id), horario: slot.horario, status: slot.status,
+      descricaoIntervalo: slot.descricaoIntervalo || '',
       servico: slot.servico || '', cliente: slot.cliente ? String(slot.cliente) : null,
       clienteNome: slot.clienteNome || '', observacao: slot.observacao || '',
       servicos: (slot.servicos || []).map((servico) => ({ id: String(servico.id), nome: servico.nome, duracaoMinutos: Number(servico.duracaoMinutos) })),

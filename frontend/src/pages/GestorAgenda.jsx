@@ -107,6 +107,16 @@ export default function GestorAgenda() {
   }, [profissionalId]);
 
   useEffect(() => {
+    function atualizarAgendaPelasNotificacoes() {
+      if (!profissionalId) return;
+      carregarAgenda(data, true);
+      carregarAgendasAbertas();
+    }
+    window.addEventListener('agenda:atualizar', atualizarAgendaPelasNotificacoes);
+    return () => window.removeEventListener('agenda:atualizar', atualizarAgendaPelasNotificacoes);
+  }, [data, profissionalId]);
+
+  useEffect(() => {
     api.get('/servicos').then(({ data }) => setServicosCatalogo(data)).catch(() => setErro('Não foi possível carregar os serviços disponíveis.'));
   }, []);
 
@@ -345,7 +355,7 @@ export default function GestorAgenda() {
                 <span className={'badge badge-' + slot.status}>
                   {slot.status === 'disponivel' && 'Disponível'}
                   {slot.status === 'reservado' && 'Reservado'}
-                  {slot.status === 'bloqueado' && 'Indisponível'}
+                  {slot.status === 'bloqueado' && (slot.descricaoIntervalo || 'Indisponível')}
                 </span>
                 {slot.status === 'reservado' && (
                   <span className="linha-slot-cliente">
@@ -353,7 +363,7 @@ export default function GestorAgenda() {
                   </span>
                 )}
               </div>
-              <div className="linha-slot-acoes">
+              <div className={'linha-slot-acoes' + (slot.status === 'disponivel' ? ' acoes-slot-disponivel' : '')}>
                 {slot.status === 'reservado' && slot.reservaInicio !== false && (
                   <>
                     <button className="botao-pequeno" onClick={() => setConfirmacao({ tipo: 'cancelar', slot })}>

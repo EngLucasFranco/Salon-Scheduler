@@ -122,6 +122,24 @@ test('persistência SQLite e autenticação com migração de senhas', async (t)
     assert.equal(segundo.body.slots[0].status, 'disponivel');
   });
 
+  await t.test('intervalos exibem sua descrição à profissional e não são enviados à cliente', async () => {
+    const { criar: criarProfissional } = require('../controllers/professionalController');
+    const agendaController = require('../controllers/availabilityController');
+    const gestor = { id: 'gestor-intervalo', papel: 'gestor' };
+    const profissionalRes = response();
+    await criarProfissional({ body: { nome: 'Profissional de intervalo', intervalos: [{ descricao: 'Horário de almoço', inicio: '12:00', fim: '13:00' }] }, usuario: gestor }, profissionalRes);
+    const profissionalId = profissionalRes.body.id;
+    const abrirRes = response();
+    await agendaController.abrirAgenda({ body: { data: '2030-01-12', inicio: '11:30', fim: '13:30', intervalo: 30, profissionalId }, usuario: gestor }, abrirRes);
+    assert.equal(abrirRes.statusCode, 201);
+    const agendaProfissionalRes = response();
+    await agendaController.listarPorData({ params: { data: '2030-01-12' }, query: { profissionalId }, body: {}, usuario: { papel: 'colaborador', profissionalId } }, agendaProfissionalRes);
+    assert.equal(agendaProfissionalRes.body.slots.find((slot) => slot.horario === '12:00').descricaoIntervalo, 'Horário de almoço');
+    const agendaClienteRes = response();
+    await agendaController.listarPorData({ params: { data: '2030-01-12' }, query: { profissionalId }, body: {}, usuario: { id: 'cliente-intervalo', papel: 'cliente' } }, agendaClienteRes);
+    assert.deepEqual(agendaClienteRes.body.slots.map((slot) => slot.horario), ['11:30', '13:00', '13:30']);
+  });
+
   await t.test('gestor marca para cliente cadastrada ou avulsa e a cadastrada vê sua reserva', async () => {
     const agendaController = require('../controllers/availabilityController');
     const gestor = { id: 'gestor-marcacao', nome: 'Gestor de marcação', papel: 'gestor' };
