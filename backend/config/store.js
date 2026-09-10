@@ -2,8 +2,6 @@ const path = require('path');
 const fs = require('fs');
 const { hashPassword, isPasswordHash } = require('../utils/password');
 const { randomUUID } = require('crypto');
-const { open } = require('sqlite');
-const sqlite3 = require('sqlite3');
 const connectMongo = require('./db');
 const User = require('../models/User');
 const Availability = require('../models/Availability');
@@ -21,6 +19,9 @@ function usingMongo() {
 }
 
 async function sqlite() {
+  const { open } = require('sqlite');
+  const sqlite3 = require('sqlite3');
+
   if (!sqlitePromise) {
     const filename = process.env.SQLITE_PATH || path.resolve(__dirname, '../data/agenda.sqlite');
     fs.mkdirSync(path.dirname(filename), { recursive: true });
