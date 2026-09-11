@@ -134,8 +134,8 @@ export default function Usuarios() {
             <AlertaTemporario tipo="erro" mensagem={erro} />
 
             <label>Nome completo<input value={form.nome} onChange={(e) => atualizar('nome', e.target.value)} required /></label>
-            <label>Usuário<input value={form.login} onChange={(e) => atualizar('login', e.target.value)} minLength={6} pattern="[A-Za-z0-9]+" autoComplete="username" required /></label>
             <label>Telefone<input value={form.telefone} onChange={(e) => atualizar('telefone', e.target.value)} /></label>
+            <label>Usuário<input value={form.login} onChange={(e) => atualizar('login', e.target.value)} minLength={6} pattern="[A-Za-z0-9]+" autoComplete="username" required /></label>
             <label>Senha<input type="password" value={form.senha} onChange={(e) => atualizar('senha', e.target.value)} minLength={6} autoComplete="new-password" required={!usuarioEmEdicao} /></label>
             <label>Nível de acesso
               <select value={form.papel} onChange={(e) => atualizar('papel', e.target.value)}>
