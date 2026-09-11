@@ -20,7 +20,7 @@ async function registrar(req, res) {
 
     const usuarioExistente = await findUserByLogin(login);
     if (usuarioExistente) {
-      return res.status(409).json({ mensagem: 'Este usuário já está em uso.' });
+      return res.status(409).json({ mensagem: 'Este usuário está indisponível.' });
     }
 
     const usuario = await createUser({ nome, login, telefone, senha, papel: 'cliente' });
@@ -28,6 +28,7 @@ async function registrar(req, res) {
 
     return res.status(201).json({ usuario: safeUser(usuario), token });
   } catch (erro) {
+    if (erro.code === 11000 || /UNIQUE constraint failed/i.test(erro.message || '')) return res.status(409).json({ mensagem: 'Este usuário está indisponível.' });
     console.error(erro);
     return res.status(500).json({ mensagem: 'Erro ao registrar usuário.' });
   }

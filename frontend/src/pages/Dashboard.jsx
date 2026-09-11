@@ -33,7 +33,7 @@ export default function Dashboard() {
   const meiosPagamento = useMemo(() => [...new Set(cobrancas.flatMap(meiosDaCobranca))].sort((a, b) => a.localeCompare(b)), [cobrancas]);
   const cobrancasFiltradas = cobrancas.filter((cobranca) => (!meioPagamento || meiosDaCobranca(cobranca).includes(meioPagamento)) && (!colaborador || cobranca.profissionalNome === colaborador));
   const total = cobrancasFiltradas.reduce((soma, cobranca) => soma + Number(cobranca.total), 0);
-  const ticketMedio = cobrancasFiltradas.length ? total / cobrancasFiltradas.length : 0;
+  const custoProdutos = cobrancasFiltradas.reduce((soma, cobranca) => soma + cobranca.itens.filter((item) => item.tipo === 'produto').reduce((subtotal, item) => subtotal + Number(item.custoUnitario || 0) * Number(item.quantidade || 0), 0), 0);
   const servicosExecutados = cobrancasFiltradas.reduce((soma, cobranca) => soma + cobranca.itens.filter((item) => item.tipo === 'servico').reduce((quantidade, item) => quantidade + Number(item.quantidade), 0), 0);
   const produtosVendidos = cobrancasFiltradas.reduce((soma, cobranca) => soma + cobranca.itens.filter((item) => item.tipo === 'produto').reduce((quantidade, item) => quantidade + Number(item.quantidade), 0), 0);
   const clientesAtendidos = new Set(cobrancasFiltradas.map((cobranca) => cobranca.clienteNome).filter(Boolean)).size;
@@ -48,7 +48,7 @@ export default function Dashboard() {
     <section className="dashboard-cards" aria-label="Indicadores financeiros">
       <article className="dashboard-indicador"><span>Total recebido</span><strong>{moeda(total)}</strong><small>no período selecionado</small></article>
       <article className="dashboard-indicador indicador-claro"><span>Pagamentos registrados</span><strong>{cobrancasFiltradas.length}</strong><small>vendas encontradas</small></article>
-      <article className="dashboard-indicador indicador-claro"><span>Ticket médio</span><strong>{moeda(ticketMedio)}</strong><small>por pagamento</small></article>
+      <article className="dashboard-indicador indicador-claro"><span>Custo</span><strong>{moeda(custoProdutos)}</strong><small>dos produtos vendidos</small></article>
       <article className="dashboard-indicador indicador-claro"><span>Serviços executados</span><strong>{servicosExecutados}</strong><small>no período selecionado</small></article>
       <article className="dashboard-indicador indicador-claro"><span>Produtos vendidos</span><strong>{produtosVendidos}</strong><small>no período selecionado</small></article>
       <article className="dashboard-indicador indicador-claro"><span>Clientes atendidos</span><strong>{clientesAtendidos}</strong><small>clientes únicos</small></article>

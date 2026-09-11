@@ -1,9 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import api from '../api/axios';
 import AlertaTemporario from '../components/AlertaTemporario';
 import ModalConfirmacao from '../components/ModalConfirmacao';
 
-const formularioInicial = { nome: '', tipo: 'servico', valor: '', duracaoMinutos: 30 };
+const formularioInicial = { nome: '', tipo: 'servico', valor: '', custo: 0, duracaoMinutos: 30 };
+
+function moedaDeCentavos(centavos) { return `R$ ${(Number(centavos || 0) / 100).toFixed(2).replace('.', ',')}`; }
+function valorParaCentavos(valor) { return Math.round(Number(valor || 0) * 100); }
+
+function CampoMoeda({ centavos, onChange, ...props }) {
+  const referencia = useRef(null); const digitosAntesCursor = useRef(null); const valor = moedaDeCentavos(centavos);
+  useLayoutEffect(() => {
+    const input = referencia.current; const digitos = digitosAntesCursor.current;
+    if (!input || digitos === null) return;
+    let vistos = 0; let posicao = valor.length;
+    for (let indice = 0; indice < valor.length; indice += 1) { if (/\d/.test(valor[indice])) vistos += 1; if (vistos >= digitos) { posicao = indice + 1; break; } }
+    input.setSelectionRange(posicao, posicao); digitosAntesCursor.current = null;
+  }, [valor]);
+  function alterar(evento) { const cursor = evento.target.selectionStart || 0; digitosAntesCursor.current = evento.target.value.slice(0, cursor).replace(/\D/g, '').length; onChange(Number(evento.target.value.replace(/\D/g, '')) || 0); }
+  return <input {...props} ref={referencia} type="text" inputMode="numeric" value={valor} onChange={alterar} />;
+}
 
 function formatarDuracao(minutos) {
   const horas = Math.floor(minutos / 60);
@@ -25,6 +41,8 @@ export default function Catalogo() {
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [modalNovoAberto, setModalNovoAberto] = useState(false);
+  const [detalhamentoAberto, setDetalhamentoAberto] = useState(false); const [origemDetalhamento, setOrigemDetalhamento] = useState('novo'); const [detalheNome, setDetalheNome] = useState(''); const [detalheCusto, setDetalheCusto] = useState(0); const [detalheMargem, setDetalheMargem] = useState(''); const [detalhePreco, setDetalhePreco] = useState(0);
+  const esperaAjuste = useRef(null); const intervaloAjuste = useRef(null); const pressionamentoLongo = useRef(false);
 
   async function carregarServicos() {
     setCarregando(true);
@@ -39,6 +57,17 @@ export default function Catalogo() {
   }
 
   useEffect(() => { carregarServicos(); }, []);
+  useEffect(() => () => { clearTimeout(esperaAjuste.current); clearInterval(intervaloAjuste.current); }, []);
+  function calcularPreco(custo, margem) { return Math.round(Number(custo || 0) * (1 + Number(margem || 0) / 100)); }
+  function margemDoProduto(custo, preco) { return custo > 0 ? String(Math.max(0, Math.min(999, Math.round(((preco / custo) - 1) * 100)))) : ''; }
+  function abrirDetalhamento(origem = 'novo') { const produto = origem === 'edicao' ? formEdicao : form; const custo = valorParaCentavos(produto.custo); const preco = valorParaCentavos(produto.valor); setOrigemDetalhamento(origem); setDetalheNome(produto.nome); setDetalheCusto(custo); setDetalheMargem(margemDoProduto(custo, preco)); setDetalhePreco(preco); setDetalhamentoAberto(true); }
+  function alterarCusto(custo) { setDetalheCusto(custo); setDetalhePreco(calcularPreco(custo, detalheMargem)); }
+  function alterarMargem(valor) { const margem = valor.replace(/\D/g, '').slice(0, 3); setDetalheMargem(margem); setDetalhePreco(calcularPreco(detalheCusto, margem)); }
+  function atualizarMargem(preco) { setDetalheMargem(margemDoProduto(detalheCusto, preco)); }
+  function ajustarPreco(variacao) { setDetalhePreco((anterior) => { const preco = Math.max(0, anterior + variacao); atualizarMargem(preco); return preco; }); }
+  function iniciarAjuste(variacao) { pressionamentoLongo.current = false; esperaAjuste.current = setTimeout(() => { pressionamentoLongo.current = true; ajustarPreco(variacao); intervaloAjuste.current = setInterval(() => ajustarPreco(variacao), 75); }, 1000); }
+  function pararAjuste() { clearTimeout(esperaAjuste.current); clearInterval(intervaloAjuste.current); esperaAjuste.current = null; intervaloAjuste.current = null; }
+  function confirmarDetalhamento() { const valores = { nome: detalheNome, custo: (detalheCusto / 100).toFixed(2), valor: (detalhePreco / 100).toFixed(2) }; if (origemDetalhamento === 'edicao') setFormEdicao((anterior) => ({ ...anterior, ...valores })); else setForm((anterior) => ({ ...anterior, ...valores })); setDetalhamentoAberto(false); }
   function renderizarItens(itens) {
     return (
       <div className="lista-servicos visualizacao-lista">
@@ -76,7 +105,7 @@ export default function Catalogo() {
 
   function abrirEdicao(servico) {
     setServicoEmEdicao(servico);
-    setFormEdicao({ nome: servico.nome, tipo: servico.tipo || 'servico', valor: servico.valor ?? '', duracaoMinutos: servico.duracaoMinutos || 30 });
+    setFormEdicao({ nome: servico.nome, tipo: servico.tipo || 'servico', valor: servico.valor ?? '', custo: servico.custo ?? 0, duracaoMinutos: servico.duracaoMinutos || 30 });
     setErro('');
   }
 
@@ -124,7 +153,9 @@ export default function Catalogo() {
 
       <div className="card-cadastro-servico"><button type="button" onClick={() => { setForm({ ...formularioInicial, tipo: '' }); setModalNovoAberto(true); }}>+ Produto / Serviço</button></div>
 
-      {modalNovoAberto && <div className="modal-fundo"><form className="modal" onSubmit={salvar}><h2>Novo produto / serviço</h2><div className="tipo-catalogo"><label><input type="checkbox" checked={form.tipo === 'produto'} onChange={() => setForm((x) => ({ ...x, tipo: 'produto' }))} /> Produto</label><label><input type="checkbox" checked={form.tipo === 'servico'} onChange={() => setForm((x) => ({ ...x, tipo: 'servico' }))} /> Serviço</label></div>{form.tipo && <><label>Descrição<input value={form.nome} onChange={(e) => setForm((x) => ({ ...x, nome: e.target.value }))} required /></label><label>Valor<input type="number" min="0" step="0.01" value={form.valor} onChange={(e) => setForm((x) => ({ ...x, valor: e.target.value }))} required /></label>{form.tipo === 'servico' && <label>Tempo<input type="number" min="5" value={form.duracaoMinutos} onChange={(e) => setForm((x) => ({ ...x, duracaoMinutos: e.target.value }))} required /></label>}</>}<div className="modal-acoes"><button type="button" className="botao-secundario" onClick={() => setModalNovoAberto(false)}>Cancelar</button><button type="submit" disabled={!form.tipo || salvando}>Salvar</button></div></form></div>}
+      {modalNovoAberto && <div className="modal-fundo"><form className="modal" onSubmit={salvar}><h2>Novo produto / serviço</h2><div className="tipo-catalogo"><label><input type="checkbox" checked={form.tipo === 'produto'} onChange={() => setForm((x) => ({ ...x, tipo: 'produto' }))} /> Produto</label><label><input type="checkbox" checked={form.tipo === 'servico'} onChange={() => setForm((x) => ({ ...x, tipo: 'servico' }))} /> Serviço</label></div>{form.tipo && <><label>Descrição<input value={form.nome} onChange={(e) => setForm((x) => ({ ...x, nome: e.target.value }))} required /></label>{form.tipo === 'produto' ? <div className="campo-valor-detalhar"><label>Valor<input type="number" min="0" step="0.01" value={form.valor} onChange={(e) => setForm((x) => ({ ...x, valor: e.target.value }))} required /></label><button type="button" className="botao-secundario" onClick={() => abrirDetalhamento('novo')}>Detalhar</button></div> : <label>Valor<input type="number" min="0" step="0.01" value={form.valor} onChange={(e) => setForm((x) => ({ ...x, valor: e.target.value }))} required /></label>}{form.tipo === 'servico' && <label>Tempo<input type="number" min="5" value={form.duracaoMinutos} onChange={(e) => setForm((x) => ({ ...x, duracaoMinutos: e.target.value }))} required /></label>}</>}<div className="modal-acoes"><button type="button" className="botao-secundario" onClick={() => setModalNovoAberto(false)}>Cancelar</button><button type="submit" disabled={!form.tipo || salvando}>Salvar</button></div></form></div>}
+
+      {detalhamentoAberto && <div className="modal-fundo modal-fundo-superior" role="presentation" onMouseDown={() => { pararAjuste(); setDetalhamentoAberto(false); }}><section className="modal modal-detalhar-produto" role="dialog" aria-modal="true" aria-label="Detalhar preço do produto" onMouseDown={(evento) => evento.stopPropagation()}><div className="modal-cabecalho"><h2>Detalhar produto</h2><button type="button" className="modal-fechar" onClick={() => setDetalhamentoAberto(false)} aria-label="Fechar">×</button></div><label>Nome do produto<input value={detalheNome} onChange={(e) => setDetalheNome(e.target.value)} autoFocus /></label><div className="campos-custo-margem"><label>Custo<CampoMoeda centavos={detalheCusto} onChange={alterarCusto} /></label><label>Margem<input inputMode="numeric" value={detalheMargem} onChange={(e) => alterarMargem(e.target.value)} placeholder="00" /></label></div><label>Preço<div className="ajuste-fino-preco"><button type="button" onPointerDown={() => iniciarAjuste(-1)} onPointerUp={pararAjuste} onPointerLeave={pararAjuste} onPointerCancel={pararAjuste} onClick={() => { if (pressionamentoLongo.current) { pressionamentoLongo.current = false; return; } ajustarPreco(-1); }} aria-label="Reduzir preço">−</button><CampoMoeda centavos={detalhePreco} onChange={(preco) => { setDetalhePreco(preco); atualizarMargem(preco); }} /><button type="button" onPointerDown={() => iniciarAjuste(1)} onPointerUp={pararAjuste} onPointerLeave={pararAjuste} onPointerCancel={pararAjuste} onClick={() => { if (pressionamentoLongo.current) { pressionamentoLongo.current = false; return; } ajustarPreco(1); }} aria-label="Aumentar preço">+</button></div></label><div className="modal-acoes"><button type="button" className="botao-secundario" onClick={() => setDetalhamentoAberto(false)}>Cancelar</button><button type="button" onClick={confirmarDetalhamento}>Ok</button></div></section></div>}
 
       <section className="lista-catalogo" aria-label="Serviços cadastrados">
         {carregando ? <p>Carregando catálogo...</p> : servicos.length > 0 ? (
@@ -147,7 +178,8 @@ export default function Catalogo() {
               <input value={formEdicao.nome} onChange={(e) => setFormEdicao((anterior) => ({ ...anterior, nome: e.target.value }))} maxLength="100" required />
             </label>
             <label>Tipo<select value={formEdicao.tipo} onChange={(e) => setFormEdicao((anterior) => ({ ...anterior, tipo: e.target.value }))}><option value="servico">Serviço</option><option value="produto">Produto</option></select></label>
-            <label>Valor<input type="number" min="0" step="0.01" value={formEdicao.valor} onChange={(e) => setFormEdicao((anterior) => ({ ...anterior, valor: e.target.value }))} required /></label>
+            {formEdicao.tipo === 'produto' ? <div className="campo-valor-detalhar"><label>Valor<input type="number" min="0" step="0.01" value={formEdicao.valor} onChange={(e) => setFormEdicao((anterior) => ({ ...anterior, valor: e.target.value }))} required /></label><button type="button" className="botao-secundario" onClick={() => abrirDetalhamento('edicao')}>Detalhar</button></div> : <label>Valor<input type="number" min="0" step="0.01" value={formEdicao.valor} onChange={(e) => setFormEdicao((anterior) => ({ ...anterior, valor: e.target.value }))} required /></label>}
+            {formEdicao.tipo === 'produto' && <label>Custo<input type="number" min="0" step="0.01" value={formEdicao.custo} onChange={(e) => setFormEdicao((anterior) => ({ ...anterior, custo: e.target.value }))} required /></label>}
             {formEdicao.tipo === 'servico' && <label>
               Tempo de execução (minutos)
               <input type="number" min="5" max="720" step="5" value={formEdicao.duracaoMinutos} onChange={(e) => setFormEdicao((anterior) => ({ ...anterior, duracaoMinutos: e.target.value }))} required />

@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import ModalConfirmacao from '../components/ModalConfirmacao';
 import AlertaTemporario from '../components/AlertaTemporario';
 
-const formularioInicial = { nome: '', login: '', telefone: '', senha: '', papel: 'cliente', profissionalId: '' };
+const agendaFixaInicial = { ativa: false, profissionalId: '', frequencia: '', diaSemana: '', diaMes: '', horario: '', servicoId: '', inicioEm: '' };
+const formularioInicial = { nome: '', login: '', telefone: '', senha: '', papel: 'cliente', profissionalId: '', agendaFixa: agendaFixaInicial };
 
 export default function Usuarios() {
   const { usuario: usuarioLogado } = useAuth();
@@ -17,6 +18,7 @@ export default function Usuarios() {
   const [form, setForm] = useState(formularioInicial);
   const [salvando, setSalvando] = useState(false);
   const [profissionais, setProfissionais] = useState([]);
+  const [servicos, setServicos] = useState([]);
 
   async function carregarUsuarios() {
     setCarregando(true);
@@ -33,6 +35,7 @@ export default function Usuarios() {
 
   useEffect(() => { carregarUsuarios(); }, []);
   useEffect(() => { api.get('/profissionais').then(({ data }) => setProfissionais(data)).catch(() => {}); }, []);
+  useEffect(() => { api.get('/servicos').then(({ data }) => setServicos(data.filter((servico) => servico.tipo !== 'produto'))).catch(() => {}); }, []);
 
   function abrirCadastro() {
     setUsuarioEmEdicao(null);
@@ -43,7 +46,7 @@ export default function Usuarios() {
 
   function abrirEdicao(usuario) {
     setUsuarioEmEdicao(usuario);
-    setForm({ nome: usuario.nome, login: usuario.login, telefone: usuario.telefone || '', senha: '', papel: usuario.papel, profissionalId: usuario.profissionalId || '' });
+    setForm({ nome: usuario.nome, login: usuario.login, telefone: usuario.telefone || '', senha: '', papel: usuario.papel, profissionalId: usuario.profissionalId || '', agendaFixa: { ...agendaFixaInicial, ...(usuario.agendaFixa || {}) } });
     setErro('');
     setModalAberto(true);
   }
@@ -55,6 +58,12 @@ export default function Usuarios() {
   function atualizar(campo, valor) {
     setForm((anterior) => ({ ...anterior, [campo]: valor }));
   }
+  function atualizarAgendaFixa(campo, valor) { setForm((anterior) => ({ ...anterior, agendaFixa: { ...anterior.agendaFixa, [campo]: valor } })); }
+  function alternarAgendaFixa() { setForm((anterior) => ({ ...anterior, agendaFixa: { ...anterior.agendaFixa, ativa: !anterior.agendaFixa.ativa, inicioEm: !anterior.agendaFixa.ativa && !anterior.agendaFixa.inicioEm ? new Date().toISOString().slice(0, 10) : anterior.agendaFixa.inicioEm } })); }
+  const profissionalAgendaFixa = profissionais.find((profissional) => String(profissional.id) === String(form.agendaFixa.profissionalId));
+  const diasAgendaFixa = profissionalAgendaFixa?.diasAtendimento || [];
+  const nomesDias = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+  function alterarHorarioAgendaFixa(horario) { if ((profissionalAgendaFixa?.intervalos || []).some((intervalo) => horario >= intervalo.inicio && horario < intervalo.fim)) { setErro('O horário da agenda fixa não pode coincidir com o intervalo da profissional.'); return; } setErro(''); atualizarAgendaFixa('horario', horario); }
 
   async function salvar(evento) {
     evento.preventDefault();
@@ -152,6 +161,7 @@ export default function Usuarios() {
                 </select>
               </label>
             )}
+            {usuarioEmEdicao && form.papel === 'cliente' && <><div className="agenda-fixa-switch"><span>Agenda Fixa</span><button type="button" role="switch" aria-checked={form.agendaFixa.ativa} className={form.agendaFixa.ativa ? 'ligado' : ''} onClick={alternarAgendaFixa}><span className="agenda-fixa-indicador">{form.agendaFixa.ativa ? 'On' : 'Off'}</span><span className="agenda-fixa-trilho" /></button></div>{form.agendaFixa.ativa && <div className="configuracao-agenda-fixa"><label>Profissional<select value={form.agendaFixa.profissionalId} onChange={(e) => atualizarAgendaFixa('profissionalId', e.target.value)} required><option value="">Selecione</option>{profissionais.map((profissional) => <option key={profissional.id} value={profissional.id}>{profissional.nome}</option>)}</select></label><label>Recorrência<select value={form.agendaFixa.frequencia} onChange={(e) => atualizarAgendaFixa('frequencia', e.target.value)} required><option value="">Selecione</option><option value="diario">Diário</option><option value="semanal">Semanal</option><option value="quinzenal">Quinzenal</option><option value="mensal">Mensal</option></select></label>{['semanal', 'quinzenal'].includes(form.agendaFixa.frequencia) && <label>Dia da semana<select value={form.agendaFixa.diaSemana} onChange={(e) => atualizarAgendaFixa('diaSemana', e.target.value)} required><option value="">Selecione</option>{diasAgendaFixa.map((dia) => <option key={dia} value={dia}>{nomesDias[dia]}</option>)}</select></label>}{form.agendaFixa.frequencia === 'mensal' && <label>Dia do mês<input type="number" min="1" max="31" value={form.agendaFixa.diaMes} onChange={(e) => atualizarAgendaFixa('diaMes', e.target.value)} required /></label>}<label>Horário<input type="time" value={form.agendaFixa.horario} onChange={(e) => alterarHorarioAgendaFixa(e.target.value)} required /></label><label>Serviço<select value={form.agendaFixa.servicoId} onChange={(e) => atualizarAgendaFixa('servicoId', e.target.value)} required><option value="">Selecione</option>{servicos.map((servico) => <option key={servico.id} value={servico.id}>{servico.nome}</option>)}</select></label></div>}</>}
             <div className="modal-acoes">
               <button type="button" className="botao-secundario" onClick={fecharModal}>Cancelar</button>
               <button type="submit" disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar usuário'}</button>

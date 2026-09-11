@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const notificationSchema = new mongoose.Schema({
-  tipo: { type: String, enum: ['reserva-profissional', 'lembrete-cliente'], required: true },
+  tipo: { type: String, enum: ['reserva-profissional', 'lembrete-cliente', 'agenda-fixa-indisponivel'], required: true },
   usuarioId: { type: String, default: '' },
   profissionalId: { type: String, default: '' },
   titulo: { type: String, required: true },

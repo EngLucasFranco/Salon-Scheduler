@@ -6,6 +6,7 @@ const itemSchema = new mongoose.Schema({
   tipo: { type: String, enum: ['servico', 'produto'], required: true },
   quantidade: { type: Number, required: true, min: 1 },
   valorUnitario: { type: Number, required: true, min: 0 },
+  custoUnitario: { type: Number, default: 0, min: 0 },
 }, { _id: false });
 
 const paymentSplitSchema = new mongoose.Schema({

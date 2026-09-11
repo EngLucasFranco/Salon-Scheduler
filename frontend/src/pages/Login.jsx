@@ -57,6 +57,10 @@ export default function Login() {
         <p className="link-secundario">
           Não tem conta? <Link to="/registrar">Cadastre-se</Link>
         </p>
+        <footer className="rodape-login">
+          <span>Salon Scheduler © 2026 — All rights reserved.</span>
+          <span>Dev by Lucas Pires Franco — Engenharia de Computação.</span>
+        </footer>
       </form>
     </div>
   );

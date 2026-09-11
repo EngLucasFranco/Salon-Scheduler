@@ -13,6 +13,7 @@ const userSchema = new mongoose.Schema(
       default: 'cliente',
     },
     profissionalId: { type: String, default: '' },
+    agendaFixa: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true }
 );
@@ -34,6 +35,7 @@ userSchema.methods.toSafeObject = function toSafeObject() {
     telefone: this.telefone,
     papel: this.papel,
     profissionalId: this.profissionalId || '',
+    agendaFixa: this.agendaFixa || null,
   };
 };
 

@@ -42,13 +42,13 @@ export default function Registrar() {
         </label>
 
         <label>
-          Usuário
-          <input value={form.login} onChange={(e) => atualizar('login', e.target.value)} minLength={6} pattern="[A-Za-z0-9]+" autoComplete="username" required />
+          Telefone
+          <input value={form.telefone} onChange={(e) => atualizar('telefone', e.target.value)} placeholder="(00) 00000-0000" />
         </label>
 
         <label>
-          Telefone
-          <input value={form.telefone} onChange={(e) => atualizar('telefone', e.target.value)} placeholder="(00) 00000-0000" />
+          Usuário
+          <input value={form.login} onChange={(e) => atualizar('login', e.target.value)} minLength={6} pattern="[A-Za-z0-9]+" autoComplete="username" required />
         </label>
 
         <label>

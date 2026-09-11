@@ -118,6 +118,46 @@ async function notificarProfissionalSobreReserva(agenda, slot) {
   await createNotification({ tipo: 'reserva-profissional', profissionalId: String(agenda.profissionalId), titulo: 'Nova reserva na agenda', mensagem: `${slot.clienteNome} marcou ${slot.servico} para ${agenda.data.split('-').reverse().join('/')} às ${slot.horario}.`, dataReserva: agenda.data, horarioReserva: slot.horario, chave: `reserva-profissional:${agenda.data}:${agenda.profissionalId}:${slot.reservaId || slot._id}` });
 }
 
+function agendaFixaValeNaData(configuracao, data) {
+  const dataUtc = new Date(`${data}T00:00:00Z`);
+  const diaSemana = dataUtc.getUTCDay();
+  if (configuracao.frequencia === 'diario') return true;
+  if (configuracao.frequencia === 'mensal') return Number(configuracao.diaMes) === dataUtc.getUTCDate();
+  if (Number(configuracao.diaSemana) !== diaSemana) return false;
+  if (configuracao.frequencia === 'semanal') return true;
+  if (configuracao.frequencia !== 'quinzenal') return false;
+  const inicio = configuracao.inicioEm ? new Date(`${configuracao.inicioEm}T00:00:00Z`) : dataUtc;
+  return Math.abs(Math.floor((dataUtc - inicio) / 86400000)) % 14 < 7;
+}
+
+async function aplicarAgendasFixas(agenda) {
+  const [usuarios, catalogo] = await Promise.all([listUsers(), listServices()]);
+  for (const cliente of usuarios.filter((usuario) => usuario.papel === 'cliente' && usuario.agendaFixa?.ativa && String(usuario.agendaFixa.profissionalId) === String(agenda.profissionalId))) {
+    const configuracao = cliente.agendaFixa;
+    if (!agendaFixaValeNaData(configuracao, agenda.data)) continue;
+    const servico = catalogo.find((item) => String(item.id) === String(configuracao.servicoId) && item.tipo !== 'produto');
+    const slot = agenda.slots.find((item) => item.horario === configuracao.horario && item.status === 'disponivel');
+    if (!servico || !slot) continue;
+    const slots = aplicarReserva(agenda, slot, [servico], cliente);
+    if (slots) await notificarProfissionalSobreReserva(agenda, slot);
+  }
+  return saveAgenda(agenda);
+}
+
+async function notificarAgendaFixaMensalIndisponivel(profissional, dataReferencia) {
+  const [ano, mes] = dataReferencia.split('-').map(Number);
+  const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const clientes = (await listUsers()).filter((usuario) => usuario.papel === 'cliente' && usuario.agendaFixa?.ativa && usuario.agendaFixa.frequencia === 'mensal' && String(usuario.agendaFixa.profissionalId) === String(profissional.id));
+  await Promise.all(clientes.map(async (cliente) => {
+    const dia = Number(cliente.agendaFixa.diaMes);
+    if (!Number.isInteger(dia) || dia < 1 || dia > ultimoDia) return;
+    const data = `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+    const diaSemana = new Date(`${data}T00:00:00Z`).getUTCDay();
+    if ((profissional.diasAtendimento || []).includes(diaSemana)) return;
+    await createNotification({ tipo: 'agenda-fixa-indisponivel', usuarioId: String(cliente.id), titulo: 'Agenda fixa indisponível', mensagem: `Você deverá reagendar o serviço com a profissional ${profissional.nome} devido à indisponibilidade de agenda no dia ${data.split('-').reverse().join('/')}.`, dataReserva: data, horarioReserva: cliente.agendaFixa.horario || '', chave: `agenda-fixa-indisponivel:${cliente.id}:${profissional.id}:${data}` });
+  }));
+}
+
 async function abrirAgenda(req, res) {
   try {
     const { data, inicio, fim, intervalo, periodo = 'dia' } = req.body;
@@ -127,10 +167,11 @@ async function abrirAgenda(req, res) {
       const diasAtendimento = profissional.diasAtendimento || [1, 2, 3, 4, 5, 6, 0];
       const datas = datasDoPeriodo(data, periodo).filter((item) => diasAtendimento.includes(new Date(`${item}T00:00:00Z`).getUTCDay()));
       if (!['semana', 'mes'].includes(periodo) || !datas.length || !horarios.length) return res.status(400).json({ mensagem: 'Informe dados válidos para abrir a agenda.' });
+      if (periodo === 'mes') await notificarAgendaFixaMensalIndisponivel(profissional, data);
       const existentes = await Promise.all(datas.map((item) => findAgenda(item, profissional.id)));
       const indiceExistente = existentes.findIndex(Boolean);
       if (indiceExistente >= 0) return res.status(409).json({ mensagem: `Já existe uma agenda para ${datas[indiceExistente]}.` });
-      const agendas = await Promise.all(datas.map((item) => saveAgenda({ data: item, profissionalId: profissional.id, profissionalNome: profissional.nome, aberta: true, intervalo: Number(intervalo), criadoPor: req.usuario.id, slots: horarios.map((horario) => slotParaHorario(horario, profissional.intervalos)) })));
+      const agendas = await Promise.all(datas.map((item) => aplicarAgendasFixas({ data: item, profissionalId: profissional.id, profissionalNome: profissional.nome, aberta: true, intervalo: Number(intervalo), criadoPor: req.usuario.id, slots: horarios.map((horario) => slotParaHorario(horario, profissional.intervalos)) })));
       return res.status(201).json({ mensagem: `${agendas.length} agenda(s) aberta(s) com sucesso.`, agendas });
     }
     if (!data || !Array.isArray(horarios) || horarios.length === 0) return res.status(400).json({ mensagem: 'Informe a data e ao menos um horário.' });
@@ -138,7 +179,7 @@ async function abrirAgenda(req, res) {
     if (agenda) return res.status(409).json({ mensagem: agenda.aberta ? 'Já existe uma agenda aberta para esta data.' : 'Já existe uma agenda fechada para esta data.' });
     agenda = { data, profissionalId: profissional.id, profissionalNome: profissional.nome, aberta: true, intervalo: Number(intervalo), criadoPor: req.usuario.id, slots: horarios.map((horario) => slotParaHorario(horario, profissional.intervalos)) };
     agenda.slots.sort((a, b) => a.horario.localeCompare(b.horario)); agenda.aberta = true;
-    return res.status(201).json(await saveAgenda(agenda));
+    return res.status(201).json(await aplicarAgendasFixas(agenda));
   } catch (erro) { return falha(res, erro, 'Erro ao abrir a agenda.'); }
 }
 

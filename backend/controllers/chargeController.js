@@ -1,4 +1,4 @@
-const { listAgendas, listServices, listPaymentMethods, listProfessionals, createCharge, listChargesByDate, listChargesByPeriod, findChargeByReservation } = require('../config/store');
+const { listAgendas, listServices, listPaymentMethods, listProfessionals, createCharge, listChargesByDate, listChargesByPeriod, findChargeByReservation, closeCashRegister, listCashClosings } = require('../config/store');
 
 function erroServidor(res, erro, mensagem) { console.error(erro); return res.status(500).json({ mensagem }); }
 
@@ -58,7 +58,7 @@ async function criar(req, res) {
       const catalogoItem = catalogo.find((produto) => String(produto.id) === String(item.catalogoId));
       const quantidade = Number(item.quantidade);
       if (!catalogoItem || !Number.isInteger(quantidade) || quantidade < 1) return null;
-      return { catalogoId: catalogoItem.id, nome: catalogoItem.nome, tipo: catalogoItem.tipo, quantidade, valorUnitario: Number(catalogoItem.valor) };
+      return { catalogoId: catalogoItem.id, nome: catalogoItem.nome, tipo: catalogoItem.tipo, quantidade, valorUnitario: Number(catalogoItem.valor), custoUnitario: catalogoItem.tipo === 'produto' ? Number(catalogoItem.custo || 0) : 0 };
     });
     if (itensCobranca.some((item) => !item)) return res.status(400).json({ mensagem: 'Há itens inválidos na cobrança.' });
     const subtotal = itensCobranca.reduce((soma, item) => soma + item.quantidade * item.valorUnitario, 0);
@@ -83,4 +83,19 @@ async function criar(req, res) {
   }
 }
 
-module.exports = { atendimentosDoDia, listar, criar, relatorioFinanceiro };
+async function fecharCaixa(req, res) {
+  try {
+    const { data } = req.body;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data || '')) return res.status(400).json({ mensagem: 'Informe uma data válida para o fechamento.' });
+    return res.json(await closeCashRegister(data, req.usuario.id));
+  } catch (erro) { return erroServidor(res, erro, 'Não foi possível fechar o caixa.'); }
+}
+
+async function listarFechamentos(req, res) {
+  const { inicio, fim } = req.query;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio || '') || !/^\d{4}-\d{2}-\d{2}$/.test(fim || '') || inicio > fim) return res.status(400).json({ mensagem: 'Informe um período válido.' });
+  try { return res.json(await listCashClosings(inicio, fim)); }
+  catch (erro) { return erroServidor(res, erro, 'Não foi possível consultar os fechamentos.'); }
+}
+
+module.exports = { atendimentosDoDia, listar, criar, relatorioFinanceiro, fecharCaixa, listarFechamentos };
