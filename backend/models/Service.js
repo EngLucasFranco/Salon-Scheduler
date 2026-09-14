@@ -6,6 +6,8 @@ const serviceSchema = new mongoose.Schema(
     tipo: { type: String, enum: ['produto', 'servico'], required: true, default: 'servico' },
     valor: { type: Number, required: true, min: 0 },
     custo: { type: Number, min: 0, default: 0 },
+    impostos: { type: Number, min: 0, default: 0 },
+    outros: { type: Number, min: 0, default: 0 },
     duracaoMinutos: { type: Number, min: 5, max: 720, default: null },
     criadoPor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },

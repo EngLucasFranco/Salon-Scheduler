@@ -56,6 +56,8 @@ async function sqlite() {
           tipo TEXT NOT NULL DEFAULT 'servico',
           valor REAL NOT NULL DEFAULT 0,
           custo REAL NOT NULL DEFAULT 0,
+          impostos REAL NOT NULL DEFAULT 0,
+          outros REAL NOT NULL DEFAULT 0,
           duracao_minutos INTEGER,
           criado_por TEXT,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -146,6 +148,8 @@ async function sqlite() {
       if (!serviceColumns.some((column) => column.name === 'tipo')) await db.exec("ALTER TABLE services ADD COLUMN tipo TEXT NOT NULL DEFAULT 'servico'");
       if (!serviceColumns.some((column) => column.name === 'valor')) await db.exec('ALTER TABLE services ADD COLUMN valor REAL NOT NULL DEFAULT 0');
       if (!serviceColumns.some((column) => column.name === 'custo')) await db.exec('ALTER TABLE services ADD COLUMN custo REAL NOT NULL DEFAULT 0');
+      if (!serviceColumns.some((column) => column.name === 'impostos')) await db.exec('ALTER TABLE services ADD COLUMN impostos REAL NOT NULL DEFAULT 0');
+      if (!serviceColumns.some((column) => column.name === 'outros')) await db.exec('ALTER TABLE services ADD COLUMN outros REAL NOT NULL DEFAULT 0');
       const professionalColumns = await db.all('PRAGMA table_info(professionals)');
       if (!professionalColumns.some((column) => column.name === 'intervalos')) await db.exec("ALTER TABLE professionals ADD COLUMN intervalos TEXT NOT NULL DEFAULT '[]'");
       if (!professionalColumns.some((column) => column.name === 'dias_atendimento')) await db.exec("ALTER TABLE professionals ADD COLUMN dias_atendimento TEXT NOT NULL DEFAULT '[1,2,3,4,5,6,0]'");
@@ -273,31 +277,31 @@ async function upgradeUserPassword(id, previousHash, password) {
 
 function mapService(service) {
   if (!service) return null;
-  return { id: String(service._id || service.id), nome: service.nome, tipo: service.tipo || 'servico', valor: Number(service.valor || 0), custo: Number(service.custo || 0), duracaoMinutos: service.duracaoMinutos ?? service.duracao_minutos ? Number(service.duracaoMinutos ?? service.duracao_minutos) : null };
+  return { id: String(service._id || service.id), nome: service.nome, tipo: service.tipo || 'servico', valor: Number(service.valor || 0), custo: Number(service.custo || 0), impostos: Number(service.impostos || 0), outros: Number(service.outros || 0), duracaoMinutos: service.duracaoMinutos ?? service.duracao_minutos ? Number(service.duracaoMinutos ?? service.duracao_minutos) : null };
 }
 
 async function listServices() {
   if (usingMongo()) return (await Service.find().sort({ nome: 1 })).map(mapService);
-  return (await (await sqlite()).all('SELECT id, nome, tipo, valor, custo, duracao_minutos FROM services ORDER BY nome COLLATE NOCASE ASC')).map(mapService);
+  return (await (await sqlite()).all('SELECT id, nome, tipo, valor, custo, impostos, outros, duracao_minutos FROM services ORDER BY nome COLLATE NOCASE ASC')).map(mapService);
 }
 
-async function createService({ nome, tipo, valor, custo, duracaoMinutos, criadoPor }) {
-  if (usingMongo()) return mapService(await Service.create({ nome, tipo, valor, custo, duracaoMinutos, criadoPor }));
+async function createService({ nome, tipo, valor, custo, impostos, outros, duracaoMinutos, criadoPor }) {
+  if (usingMongo()) return mapService(await Service.create({ nome, tipo, valor, custo, impostos, outros, duracaoMinutos, criadoPor }));
   const id = randomUUID();
   // Bancos SQLite criados antes do suporte a produtos possuem duracao_minutos
   // como NOT NULL. Produto não tem duração, mas zero mantém compatibilidade.
   const duracaoArmazenada = tipo === 'produto' ? 0 : duracaoMinutos;
-  await (await sqlite()).run('INSERT INTO services (id, nome, tipo, valor, custo, duracao_minutos, criado_por) VALUES (?, ?, ?, ?, ?, ?, ?)', id, nome, tipo, valor, custo || 0, duracaoArmazenada, criadoPor || null);
-  return { id, nome, tipo, valor, custo: Number(custo || 0), duracaoMinutos };
+  await (await sqlite()).run('INSERT INTO services (id, nome, tipo, valor, custo, impostos, outros, duracao_minutos, criado_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', id, nome, tipo, valor, custo || 0, impostos || 0, outros || 0, duracaoArmazenada, criadoPor || null);
+  return { id, nome, tipo, valor, custo: Number(custo || 0), impostos: Number(impostos || 0), outros: Number(outros || 0), duracaoMinutos };
 }
 
-async function updateService(id, { nome, tipo, valor, custo, duracaoMinutos }) {
+async function updateService(id, { nome, tipo, valor, custo, impostos, outros, duracaoMinutos }) {
   if (usingMongo()) {
-    return mapService(await Service.findByIdAndUpdate(id, { nome, tipo, valor, custo, duracaoMinutos }, { new: true, runValidators: true }));
+    return mapService(await Service.findByIdAndUpdate(id, { nome, tipo, valor, custo, impostos, outros, duracaoMinutos }, { new: true, runValidators: true }));
   }
   const duracaoArmazenada = tipo === 'produto' ? 0 : duracaoMinutos;
-  const result = await (await sqlite()).run('UPDATE services SET nome = ?, tipo = ?, valor = ?, custo = ?, duracao_minutos = ? WHERE id = ?', nome, tipo, valor, custo || 0, duracaoArmazenada, id);
-  return result.changes ? { id: String(id), nome, tipo, valor, duracaoMinutos } : null;
+  const result = await (await sqlite()).run('UPDATE services SET nome = ?, tipo = ?, valor = ?, custo = ?, impostos = ?, outros = ?, duracao_minutos = ? WHERE id = ?', nome, tipo, valor, custo || 0, impostos || 0, outros || 0, duracaoArmazenada, id);
+  return result.changes ? { id: String(id), nome, tipo, valor, custo: Number(custo || 0), impostos: Number(impostos || 0), outros: Number(outros || 0), duracaoMinutos } : null;
 }
 
 async function deleteService(id) {
