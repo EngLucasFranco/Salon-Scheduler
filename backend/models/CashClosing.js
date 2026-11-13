@@ -5,8 +5,12 @@ const mongoose = require('mongoose');
 const cashClosingSchema = new mongoose.Schema({
   data: { type: String, required: true, unique: true, index: true },
   cobrancas: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  saidas: { type: [mongoose.Schema.Types.Mixed], default: [] },
   total: { type: Number, required: true, default: 0 },
+  totalSaidas: { type: Number, required: true, default: 0 },
+  saldo: { type: Number, required: true, default: 0 },
   quantidadePagamentos: { type: Number, required: true, default: 0 },
+  quantidadeSaidas: { type: Number, required: true, default: 0 },
   fechadoPor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   expiraEm: { type: Date, required: true, index: { expires: 0 } },
 }, { timestamps: true });

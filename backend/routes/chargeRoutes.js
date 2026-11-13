@@ -7,6 +7,8 @@ router.use(protect, authorize('gestor'));
 router.get('/atendimentos', ctrl.atendimentosDoDia);
 router.get('/relatorio-financeiro', ctrl.relatorioFinanceiro);
 router.get('/fechamentos', ctrl.listarFechamentos);
+router.get('/saidas', ctrl.listarSaidas);
+router.post('/saidas', ctrl.criarSaida);
 router.get('/', ctrl.listar);
 router.post('/', ctrl.criar);
 router.post('/fechar-caixa', ctrl.fecharCaixa);

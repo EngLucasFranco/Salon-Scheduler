@@ -9,6 +9,7 @@ const Service = require('../models/Service');
 const Professional = require('../models/Professional');
 const PaymentMethod = require('../models/PaymentMethod');
 const Charge = require('../models/Charge');
+const CashOutflow = require('../models/CashOutflow');
 const CashClosing = require('../models/CashClosing');
 const AppSetting = require('../models/AppSetting');
 const Notification = require('../models/Notification');
@@ -98,11 +99,24 @@ async function sqlite() {
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE UNIQUE INDEX IF NOT EXISTS charges_reserva_id_unique ON charges(reserva_id) WHERE reserva_id <> '';
+        CREATE TABLE IF NOT EXISTS cash_outflows (
+          id TEXT PRIMARY KEY,
+          data TEXT NOT NULL,
+          valor REAL NOT NULL,
+          meio_pagamento TEXT NOT NULL,
+          criado_por TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS cash_outflows_data_idx ON cash_outflows(data);
         CREATE TABLE IF NOT EXISTS cash_closings (
           data TEXT PRIMARY KEY,
           cobrancas TEXT NOT NULL DEFAULT '[]',
+          saidas TEXT NOT NULL DEFAULT '[]',
           total REAL NOT NULL DEFAULT 0,
+          total_saidas REAL NOT NULL DEFAULT 0,
+          saldo REAL NOT NULL DEFAULT 0,
           quantidade_pagamentos INTEGER NOT NULL DEFAULT 0,
+          quantidade_saidas INTEGER NOT NULL DEFAULT 0,
           fechado_por TEXT,
           fechado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           expira_em TEXT NOT NULL
@@ -160,6 +174,14 @@ async function sqlite() {
       if (!chargeColumns.some((column) => column.name === 'desconto')) await db.exec('ALTER TABLE charges ADD COLUMN desconto REAL NOT NULL DEFAULT 0');
       if (!chargeColumns.some((column) => column.name === 'acrescimo')) await db.exec('ALTER TABLE charges ADD COLUMN acrescimo REAL NOT NULL DEFAULT 0');
       if (!chargeColumns.some((column) => column.name === 'formas_pagamento')) await db.exec("ALTER TABLE charges ADD COLUMN formas_pagamento TEXT NOT NULL DEFAULT '[]'");
+      const closingColumns = await db.all('PRAGMA table_info(cash_closings)');
+      if (!closingColumns.some((column) => column.name === 'saidas')) await db.exec("ALTER TABLE cash_closings ADD COLUMN saidas TEXT NOT NULL DEFAULT '[]'");
+      if (!closingColumns.some((column) => column.name === 'total_saidas')) await db.exec('ALTER TABLE cash_closings ADD COLUMN total_saidas REAL NOT NULL DEFAULT 0');
+      if (!closingColumns.some((column) => column.name === 'saldo')) {
+        await db.exec('ALTER TABLE cash_closings ADD COLUMN saldo REAL NOT NULL DEFAULT 0');
+        await db.exec('UPDATE cash_closings SET saldo = total');
+      }
+      if (!closingColumns.some((column) => column.name === 'quantidade_saidas')) await db.exec('ALTER TABLE cash_closings ADD COLUMN quantidade_saidas INTEGER NOT NULL DEFAULT 0');
       await ensureUserPasswordHashes(db);
       await seedDevelopmentUsers(db);
       return db;
@@ -402,39 +424,71 @@ async function findChargeByReservation(reservaId) {
   return mapCharge(await (await sqlite()).get('SELECT * FROM charges WHERE reserva_id = ?', reservaId));
 }
 
+function mapCashOutflow(saida) {
+  if (!saida) return null;
+  return {
+    id: String(saida._id || saida.id),
+    data: saida.data,
+    valor: Number(saida.valor || 0),
+    meioPagamento: saida.meioPagamento || saida.meio_pagamento || '',
+    createdAt: saida.createdAt || saida.created_at,
+  };
+}
+
+async function createCashOutflow(saida) {
+  if (usingMongo()) return mapCashOutflow(await CashOutflow.create(saida));
+  const id = randomUUID();
+  await (await sqlite()).run(
+    'INSERT INTO cash_outflows (id, data, valor, meio_pagamento, criado_por) VALUES (?, ?, ?, ?, ?)',
+    id, saida.data, saida.valor, saida.meioPagamento, saida.criadoPor || null
+  );
+  return mapCashOutflow(await (await sqlite()).get('SELECT * FROM cash_outflows WHERE id = ?', id));
+}
+
+async function listCashOutflowsByDate(data) {
+  if (usingMongo()) return (await CashOutflow.find({ data }).sort({ createdAt: -1 })).map(mapCashOutflow);
+  return (await (await sqlite()).all('SELECT * FROM cash_outflows WHERE data = ? ORDER BY created_at DESC', data)).map(mapCashOutflow);
+}
+
 function mapCashClosing(fechamento) {
   if (!fechamento) return null;
   return {
     id: String(fechamento._id || fechamento.id || fechamento.data), data: fechamento.data,
     cobrancas: typeof fechamento.cobrancas === 'string' ? JSON.parse(fechamento.cobrancas) : (fechamento.cobrancas || []),
+    saidas: typeof fechamento.saidas === 'string' ? JSON.parse(fechamento.saidas) : (fechamento.saidas || []),
     total: Number(fechamento.total || 0), quantidadePagamentos: Number(fechamento.quantidadePagamentos || fechamento.quantidade_pagamentos || 0),
-    fechadoEm: fechamento.createdAt || fechamento.fechadoEm || fechamento.fechado_em,
+    totalSaidas: Number(fechamento.totalSaidas || fechamento.total_saidas || 0), saldo: Number(fechamento.saldo ?? fechamento.total ?? 0),
+    quantidadeSaidas: Number(fechamento.quantidadeSaidas || fechamento.quantidade_saidas || 0),
+    fechadoEm: fechamento.updatedAt || fechamento.createdAt || fechamento.fechadoEm || fechamento.fechado_em,
     expiraEm: fechamento.expiraEm || fechamento.expira_em,
   };
 }
 
 function dataExpiracaoFechamento() {
   const data = new Date();
-  data.setDate(data.getDate() + 90);
+  data.setDate(data.getDate() + 120);
   return data;
 }
 
 async function closeCashRegister(data, fechadoPor) {
-  const cobrancas = await listChargesByDate(data);
+  const [cobrancas, saidas] = await Promise.all([listChargesByDate(data), listCashOutflowsByDate(data)]);
   const total = cobrancas.reduce((soma, cobranca) => soma + Number(cobranca.total || 0), 0);
-  const fechamento = { data, cobrancas, total, quantidadePagamentos: cobrancas.length, fechadoPor: fechadoPor || null, expiraEm: dataExpiracaoFechamento() };
+  const totalSaidas = saidas.reduce((soma, saida) => soma + Number(saida.valor || 0), 0);
+  const saldo = total - totalSaidas;
+  const fechamento = { data, cobrancas, saidas, total, totalSaidas, saldo, quantidadePagamentos: cobrancas.length, quantidadeSaidas: saidas.length, fechadoPor: fechadoPor || null, expiraEm: dataExpiracaoFechamento() };
   if (usingMongo()) {
     const salvo = await CashClosing.findOneAndUpdate({ data }, fechamento, { upsert: true, new: true, setDefaultsOnInsert: true });
-    await Charge.deleteMany({ data });
+    await Promise.all([Charge.deleteMany({ data }), CashOutflow.deleteMany({ data })]);
     return mapCashClosing(salvo);
   }
   const db = await sqlite();
   await db.run('DELETE FROM cash_closings WHERE expira_em <= datetime(\'now\')');
-  await db.run(`INSERT INTO cash_closings (data, cobrancas, total, quantidade_pagamentos, fechado_por, expira_em)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(data) DO UPDATE SET cobrancas = excluded.cobrancas, total = excluded.total, quantidade_pagamentos = excluded.quantidade_pagamentos, fechado_por = excluded.fechado_por, fechado_em = CURRENT_TIMESTAMP, expira_em = excluded.expira_em`,
-  data, JSON.stringify(cobrancas), total, cobrancas.length, fechadoPor || null, fechamento.expiraEm.toISOString());
+  await db.run(`INSERT INTO cash_closings (data, cobrancas, saidas, total, total_saidas, saldo, quantidade_pagamentos, quantidade_saidas, fechado_por, expira_em)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(data) DO UPDATE SET cobrancas = excluded.cobrancas, saidas = excluded.saidas, total = excluded.total, total_saidas = excluded.total_saidas, saldo = excluded.saldo, quantidade_pagamentos = excluded.quantidade_pagamentos, quantidade_saidas = excluded.quantidade_saidas, fechado_por = excluded.fechado_por, fechado_em = CURRENT_TIMESTAMP, expira_em = excluded.expira_em`,
+  data, JSON.stringify(cobrancas), JSON.stringify(saidas), total, totalSaidas, saldo, cobrancas.length, saidas.length, fechadoPor || null, fechamento.expiraEm.toISOString());
   await db.run('DELETE FROM charges WHERE data = ?', data);
+  await db.run('DELETE FROM cash_outflows WHERE data = ?', data);
   return mapCashClosing(await db.get('SELECT * FROM cash_closings WHERE data = ?', data));
 }
 
@@ -680,4 +734,4 @@ function newSlot(horario) {
   return usingMongo() ? { horario, status: 'disponivel' } : { _id: randomUUID(), horario, status: 'disponivel' };
 }
 
-module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, upgradeUserPassword, deleteUser, listServices, createService, updateService, deleteService, listProfessionals, createProfessional, updateProfessional, deleteProfessional, listPaymentMethods, createPaymentMethod, createCharge, listChargesByDate, listChargesByPeriod, findChargeByReservation, closeCashRegister, listCashClosings, getLayoutSettings, saveLayoutSettings, getGeneralSettings, saveGeneralSettings, getNexusAuthSettings, saveNexusAuthSettings, getNexusAuthCredentials, getNotificationSettings, saveNotificationSettings, createNotification, listNotificationsForUser, markNotificationsAsRead, deleteNotificationForUser, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };
+module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, upgradeUserPassword, deleteUser, listServices, createService, updateService, deleteService, listProfessionals, createProfessional, updateProfessional, deleteProfessional, listPaymentMethods, createPaymentMethod, createCharge, listChargesByDate, listChargesByPeriod, findChargeByReservation, createCashOutflow, listCashOutflowsByDate, closeCashRegister, listCashClosings, getLayoutSettings, saveLayoutSettings, getGeneralSettings, saveGeneralSettings, getNexusAuthSettings, saveNexusAuthSettings, getNexusAuthCredentials, getNotificationSettings, saveNotificationSettings, createNotification, listNotificationsForUser, markNotificationsAsRead, deleteNotificationForUser, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };

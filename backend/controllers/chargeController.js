@@ -1,4 +1,6 @@
-const { listAgendas, listServices, listPaymentMethods, listProfessionals, createCharge, listChargesByDate, listChargesByPeriod, findChargeByReservation, closeCashRegister, listCashClosings } = require('../config/store');
+const { listAgendas, listServices, listPaymentMethods, listProfessionals, createCharge, listChargesByDate, listChargesByPeriod, findChargeByReservation, createCashOutflow, listCashOutflowsByDate, closeCashRegister, listCashClosings } = require('../config/store');
+
+const MEIOS_SAIDA = ['Dinheiro', 'Cartão de Crédito', 'Cartão de Débito', 'PIX'];
 
 function erroServidor(res, erro, mensagem) { console.error(erro); return res.status(500).json({ mensagem }); }
 
@@ -30,6 +32,25 @@ async function listar(req, res) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data || '')) return res.status(400).json({ mensagem: 'Informe uma data válida.' });
     return res.json(await listChargesByDate(data));
   } catch (erro) { return erroServidor(res, erro, 'Erro ao listar as cobranças.'); }
+}
+
+async function listarSaidas(req, res) {
+  try {
+    const data = req.query.data;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data || '')) return res.status(400).json({ mensagem: 'Informe uma data válida.' });
+    return res.json(await listCashOutflowsByDate(data));
+  } catch (erro) { return erroServidor(res, erro, 'Erro ao listar as saídas do caixa.'); }
+}
+
+async function criarSaida(req, res) {
+  try {
+    const { data, meioPagamento } = req.body;
+    const valor = Number(req.body.valor);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data || '')) return res.status(400).json({ mensagem: 'Informe uma data válida.' });
+    if (!Number.isFinite(valor) || valor <= 0) return res.status(400).json({ mensagem: 'Informe um valor de saída maior que zero.' });
+    if (!MEIOS_SAIDA.includes(meioPagamento)) return res.status(400).json({ mensagem: 'Selecione um meio de pagamento válido.' });
+    return res.status(201).json(await createCashOutflow({ data, valor, meioPagamento, criadoPor: req.usuario.id }));
+  } catch (erro) { return erroServidor(res, erro, 'Erro ao registrar a saída do caixa.'); }
 }
 
 async function relatorioFinanceiro(req, res) {
@@ -98,4 +119,4 @@ async function listarFechamentos(req, res) {
   catch (erro) { return erroServidor(res, erro, 'Não foi possível consultar os fechamentos.'); }
 }
 
-module.exports = { atendimentosDoDia, listar, criar, relatorioFinanceiro, fecharCaixa, listarFechamentos };
+module.exports = { atendimentosDoDia, listar, criar, listarSaidas, criarSaida, relatorioFinanceiro, fecharCaixa, listarFechamentos };
