@@ -12,3 +12,4 @@ backend/.vercel/
 .env.*.local
 backend/.env
 backend/data/
+Contrato.txt

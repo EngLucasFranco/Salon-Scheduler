@@ -5,7 +5,7 @@
 Pré-requisito local: Node.js 20 a 24. MongoDB Atlas só é necessário para produção.
 
 1. Copie `backend/.env.example` para `backend/.env` e informe valores reais para
-   `JWT_SECRET` e `MANAGER_INVITE_CODE`. O arquivo já vem com
+   `JWT_SECRET`, `MANAGER_INVITE_CODE` e `NEXUS_CONFIG_ENCRYPTION_KEY`. O arquivo já vem com
    `DB_PROVIDER=sqlite` e cria o arquivo local `backend/data/agenda.sqlite`.
 2. Instale tudo a partir da raiz: `npm run install:apps && npm install`.
 3. Inicie ambos os serviços: `npm run dev`.
@@ -14,8 +14,8 @@ A interface estará em `http://localhost:5173` e a API em
 `http://localhost:5000/api`. O arquivo `frontend/.env.development` já usa
 essa URL e o backend já aceita essa origem via `CORS_ORIGIN`.
 
-No banco SQLite local, a API cria as contas de demonstração `010101` / `000001`
-(cliente) e `020202` / `000002` (gestor). Elas não são criadas no MongoDB Atlas.
+No banco SQLite local, a API cria as contas de demonstração `001` / `010101`
+(cliente) e `002` / `020202` (gestor). Elas não são criadas no MongoDB Atlas.
 
 No Windows, a cópia do arquivo de ambiente também pode ser feita com:
 
@@ -46,6 +46,7 @@ No projeto da API, cadastre em Production (e Preview, se desejar):
 MONGODB_URI
 DB_PROVIDER=mongodb
 JWT_SECRET
+NEXUS_CONFIG_ENCRYPTION_KEY
 MANAGER_INVITE_CODE
 CORS_ORIGIN=https://url-do-frontend.vercel.app
 ```

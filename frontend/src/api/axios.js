@@ -23,11 +23,23 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      sessionStorage.removeItem('token');
-      sessionStorage.removeItem('usuario');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
+    const nexusBlocked = error.response?.data?.online === false && !error.config?.skipNexusModal;
+    if (error.response?.status === 401 || nexusBlocked) {
+      const configurandoNexus = window.location.pathname === '/configuracoes';
+      if (nexusBlocked) {
+        sessionStorage.setItem('nexus_access_blocked', 'true');
+        sessionStorage.setItem(
+          'nexus_access_error',
+          error.response.data.mensagem || 'A licença do programa não autoriza operações online.'
+        );
+        window.dispatchEvent(new CustomEvent('nexus-access-denied'));
+      }
+      // Um gestor que já estava autenticado pode permanecer nesta tela para
+      // substituir uma configuração incorreta do NexusControl.
+      if (!(nexusBlocked && configurandoNexus)) {
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('usuario');
+        if (window.location.pathname !== '/login') window.location.href = '/login';
       }
     }
     return Promise.reject(error);

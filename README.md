@@ -18,18 +18,18 @@ Copy-Item backend/.env.example backend/.env
 npm run dev
 ```
 
-Antes de iniciar, defina valores seguros para `JWT_SECRET` e
-`MANAGER_INVITE_CODE` em `backend/.env`. A interface abre em
+Antes de iniciar, defina valores seguros para `JWT_SECRET`,
+`NEXUS_CONFIG_ENCRYPTION_KEY` e `MANAGER_INVITE_CODE` em `backend/.env`. A interface abre em
 `http://localhost:5173` e a API em `http://localhost:5000/api`.
 
 No SQLite local, estas contas são criadas automaticamente:
 
 | Nível | Usuário | Senha |
 | --- | --- | --- |
-| Cliente | `010101` | `000001` |
-| Gestor | `020202` | `000002` |
+| Cliente | `001` | `010101` |
+| Gestor | `002` | `020202` |
 
-Os usuários aceitam somente letras e números, com mínimo de 6 caracteres. A
+Os usuários aceitam somente letras e números, com mínimo de 3 caracteres. A
 senha também tem mínimo de 6 caracteres.
 
 O guia de banco de dados e deploy está em [SETUP.md](./SETUP.md).

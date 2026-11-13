@@ -12,6 +12,7 @@ const Charge = require('../models/Charge');
 const CashClosing = require('../models/CashClosing');
 const AppSetting = require('../models/AppSetting');
 const Notification = require('../models/Notification');
+const { encryptNexusValue, decryptNexusValue } = require('../utils/nexusEncryption');
 
 let sqlitePromise;
 
@@ -144,6 +145,7 @@ async function sqlite() {
         agendaColumns = await db.all('PRAGMA table_info(agendas)');
       }
       if (!agendaColumns.some((column) => column.name === 'intervalo')) await db.exec('ALTER TABLE agendas ADD COLUMN intervalo INTEGER NOT NULL DEFAULT 0');
+      await db.exec('CREATE UNIQUE INDEX IF NOT EXISTS agendas_data_profissional_unique ON agendas(data, profissional_id)');
       const serviceColumns = await db.all('PRAGMA table_info(services)');
       if (!serviceColumns.some((column) => column.name === 'tipo')) await db.exec("ALTER TABLE services ADD COLUMN tipo TEXT NOT NULL DEFAULT 'servico'");
       if (!serviceColumns.some((column) => column.name === 'valor')) await db.exec('ALTER TABLE services ADD COLUMN valor REAL NOT NULL DEFAULT 0');
@@ -182,14 +184,15 @@ async function connectStore() {
 
 async function seedDevelopmentUsers(db) {
   const users = [
-    { nome: 'Cliente de desenvolvimento', login: '010101', senha: '000001', papel: 'cliente' },
-    { nome: 'Gestor de desenvolvimento', login: '020202', senha: '000002', papel: 'gestor' },
+    { nome: 'Cliente de desenvolvimento', login: '001', loginAnterior: '010101', senha: '010101', papel: 'cliente' },
+    { nome: 'Gestor de desenvolvimento', login: '002', loginAnterior: '020202', senha: '020202', papel: 'gestor' },
   ];
   for (const user of users) {
     const exists = await db.get('SELECT id FROM users WHERE login = ?', user.login);
-    if (!exists) {
-      await db.run('INSERT INTO users (nome, login, telefone, senha, papel) VALUES (?, ?, ?, ?, ?)', user.nome, user.login, '', await hashPassword(user.senha), user.papel);
-    }
+    if (exists) continue;
+    const anterior = await db.get('SELECT id FROM users WHERE login = ? AND nome = ? AND papel = ?', user.loginAnterior, user.nome, user.papel);
+    if (anterior) await db.run('UPDATE users SET login = ?, senha = ? WHERE id = ?', user.login, await hashPassword(user.senha), anterior.id);
+    else await db.run('INSERT INTO users (nome, login, telefone, senha, papel) VALUES (?, ?, ?, ?, ?)', user.nome, user.login, '', await hashPassword(user.senha), user.papel);
   }
 }
 
@@ -205,13 +208,13 @@ function mapMongoUser(user) {
 async function findUserByLogin(login) {
   if (usingMongo()) return mapMongoUser(await User.findOne({ login: login.toLowerCase() }));
   const db = await sqlite();
-  return db.get('SELECT id, nome, login, telefone, senha, papel, profissional_id FROM users WHERE login = ?', login.toLowerCase());
+  return db.get('SELECT id, nome, login, telefone, senha, papel, profissional_id, agenda_fixa FROM users WHERE login = ?', login.toLowerCase());
 }
 
 async function findUserById(id) {
   if (usingMongo()) return mapMongoUser(await User.findById(id).select('+senha'));
   const db = await sqlite();
-  return db.get('SELECT id, nome, login, telefone, senha, papel, profissional_id FROM users WHERE id = ?', id);
+  return db.get('SELECT id, nome, login, telefone, senha, papel, profissional_id, agenda_fixa FROM users WHERE id = ?', id);
 }
 
 async function createUser({ nome, login, telefone, senha, papel, profissionalId, agendaFixa }) {
@@ -464,16 +467,17 @@ async function saveLayoutSettings({ administrativo, cliente }) {
 }
 
 async function getGeneralSettings() {
-  const padrao = { nomeEstabelecimento: '', telefoneEstabelecimento: '', logomarca: '', enderecoEstabelecimento: '', horarioFuncionamento: '', antecedenciaDias: 3650, limiteCancelamentoHoras: 2, tratamentoAgendasPassadas: 'manter', diasVencimentoAgendas: 30, politicaCancelamento: '', mensagemConfirmacao: 'Horário marcado com sucesso!' };
+  const padrao = { nomeEstabelecimento: '', telefoneEstabelecimento: '', logomarca: '', enderecoEstabelecimento: '', horarioFuncionamento: '', antecedenciaDias: 3650, permitirCancelamentoCliente: true, limiteCancelamentoHoras: 2, tratamentoAgendasPassadas: 'manter', diasVencimentoAgendas: 30, politicaCancelamento: '', mensagemConfirmacao: 'Horário marcado com sucesso!' };
   const chaves = Object.keys(padrao).map((chave) => `geral_${chave}`);
   const valor = (registros, chave) => registros.find((item) => item.chave === `geral_${chave}`)?.valor;
   const numero = (registros, chave) => { const salvo = valor(registros, chave); return salvo === undefined ? padrao[chave] : salvo === '' ? null : Number(salvo); };
+  const booleano = (registros, chave) => { const salvo = valor(registros, chave); return salvo === undefined ? padrao[chave] : salvo === 'true'; };
   if (usingMongo()) {
     const registros = await AppSetting.find({ chave: { $in: chaves } });
-    return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' || chave === 'diasVencimentoAgendas' ? numero(registros, chave) : valor(registros, chave) ?? padrao[chave]])) };
+    return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'permitirCancelamentoCliente' ? booleano(registros, chave) : chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' || chave === 'diasVencimentoAgendas' ? numero(registros, chave) : valor(registros, chave) ?? padrao[chave]])) };
   }
   const registros = await (await sqlite()).all(`SELECT chave, valor FROM app_settings WHERE chave IN (${chaves.map(() => '?').join(', ')})`, chaves);
-  return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' || chave === 'diasVencimentoAgendas' ? numero(registros, chave) : valor(registros, chave) ?? padrao[chave]])) };
+  return { ...padrao, ...Object.fromEntries(Object.keys(padrao).map((chave) => [chave, chave === 'permitirCancelamentoCliente' ? booleano(registros, chave) : chave === 'antecedenciaDias' || chave === 'limiteCancelamentoHoras' || chave === 'diasVencimentoAgendas' ? numero(registros, chave) : valor(registros, chave) ?? padrao[chave]])) };
 }
 
 async function saveGeneralSettings(configuracoes) {
@@ -485,6 +489,52 @@ async function saveGeneralSettings(configuracoes) {
   const db = await sqlite();
   await Promise.all(valores.map(([chave, valor]) => db.run("INSERT INTO app_settings (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", `geral_${chave}`, String(valor))));
   return configuracoes;
+}
+
+const nexusSettingKeys = {
+  baseUrl: 'nexus_base_url',
+  systemKey: 'nexus_system_key',
+  apiKey: 'nexus_api_key',
+};
+
+async function nexusSettingValues() {
+  const keys = Object.values(nexusSettingKeys);
+  if (usingMongo()) {
+    const records = await AppSetting.find({ chave: { $in: keys } });
+    return Object.fromEntries(records.map((record) => [record.chave, record.valor]));
+  }
+  const records = await (await sqlite()).all(`SELECT chave, valor FROM app_settings WHERE chave IN (${keys.map(() => '?').join(', ')})`, keys);
+  return Object.fromEntries(records.map((record) => [record.chave, record.valor]));
+}
+
+async function getNexusAuthSettings() {
+  const values = await nexusSettingValues();
+  return { configurado: Object.values(nexusSettingKeys).every((key) => typeof values[key] === 'string' && values[key].startsWith('nexus:v1:')) };
+}
+
+async function saveNexusAuthSettings({ baseUrl, systemKey, apiKey }) {
+  const encrypted = {
+    [nexusSettingKeys.baseUrl]: encryptNexusValue(baseUrl),
+    [nexusSettingKeys.systemKey]: encryptNexusValue(systemKey),
+    [nexusSettingKeys.apiKey]: encryptNexusValue(apiKey),
+  };
+  if (usingMongo()) {
+    await Promise.all(Object.entries(encrypted).map(([chave, valor]) => AppSetting.findOneAndUpdate({ chave }, { valor }, { upsert: true, new: true, setDefaultsOnInsert: true })));
+  } else {
+    const db = await sqlite();
+    await Promise.all(Object.entries(encrypted).map(([chave, valor]) => db.run('INSERT INTO app_settings (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor', chave, valor)));
+  }
+  return { configurado: true };
+}
+
+async function getNexusAuthCredentials() {
+  const values = await nexusSettingValues();
+  if (!Object.values(nexusSettingKeys).every((key) => values[key])) return null;
+  return {
+    baseUrl: decryptNexusValue(values[nexusSettingKeys.baseUrl]),
+    systemKey: decryptNexusValue(values[nexusSettingKeys.systemKey]),
+    apiKey: decryptNexusValue(values[nexusSettingKeys.apiKey]),
+  };
 }
 
 const configuracoesNotificacaoPadrao = { horasAntecedenciaCliente: 2, mensagemCliente: 'Lembrete: você possui um horário agendado em breve.' };
@@ -578,6 +628,7 @@ function normalizeAgenda(agenda) {
       clienteNome: slot.clienteNome || '', observacao: slot.observacao || '',
       servicos: (slot.servicos || []).map((servico) => ({ id: String(servico.id), nome: servico.nome, duracaoMinutos: Number(servico.duracaoMinutos) })),
       duracaoMinutos: Number(slot.duracaoMinutos || 0), reservaId: slot.reservaId || '', reservaInicio: Boolean(slot.reservaInicio),
+      agendaFixa: Boolean(slot.agendaFixa),
     })),
   };
 }
@@ -629,4 +680,4 @@ function newSlot(horario) {
   return usingMongo() ? { horario, status: 'disponivel' } : { _id: randomUUID(), horario, status: 'disponivel' };
 }
 
-module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, upgradeUserPassword, deleteUser, listServices, createService, updateService, deleteService, listProfessionals, createProfessional, updateProfessional, deleteProfessional, listPaymentMethods, createPaymentMethod, createCharge, listChargesByDate, listChargesByPeriod, findChargeByReservation, closeCashRegister, listCashClosings, getLayoutSettings, saveLayoutSettings, getGeneralSettings, saveGeneralSettings, getNotificationSettings, saveNotificationSettings, createNotification, listNotificationsForUser, markNotificationsAsRead, deleteNotificationForUser, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };
+module.exports = { connectStore, usingMongo, safeUser, findUserByLogin, findUserById, createUser, listUsers, updateUser, upgradeUserPassword, deleteUser, listServices, createService, updateService, deleteService, listProfessionals, createProfessional, updateProfessional, deleteProfessional, listPaymentMethods, createPaymentMethod, createCharge, listChargesByDate, listChargesByPeriod, findChargeByReservation, closeCashRegister, listCashClosings, getLayoutSettings, saveLayoutSettings, getGeneralSettings, saveGeneralSettings, getNexusAuthSettings, saveNexusAuthSettings, getNexusAuthCredentials, getNotificationSettings, saveNotificationSettings, createNotification, listNotificationsForUser, markNotificationsAsRead, deleteNotificationForUser, findAgenda, listAgendas, saveAgenda, deleteAgenda, newSlot };

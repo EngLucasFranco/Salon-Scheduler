@@ -16,6 +16,7 @@ const slotSchema = new mongoose.Schema(
     duracaoMinutos: { type: Number, default: 0 },
     reservaId: { type: String, default: '' },
     reservaInicio: { type: Boolean, default: false },
+    agendaFixa: { type: Boolean, default: false },
     cliente: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     clienteNome: { type: String, default: '' },
     observacao: { type: String, default: '' },

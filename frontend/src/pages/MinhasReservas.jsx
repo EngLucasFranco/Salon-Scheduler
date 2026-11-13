@@ -37,8 +37,8 @@ function deveDestacarReservaHoje(reserva, agora) {
   return situacaoReserva(reserva.data) === 'hoje' && inicioReserva(reserva) > agora;
 }
 
-function podeCancelarReserva(reserva, limiteCancelamentoHoras, agora) {
-  if (limiteCancelamentoHoras === null) return false;
+function podeCancelarReserva(reserva, permitirCancelamentoCliente, limiteCancelamentoHoras, agora) {
+  if (!permitirCancelamentoCliente || limiteCancelamentoHoras === null) return false;
   return inicioReserva(reserva) - agora >= Number(limiteCancelamentoHoras) * 60 * 60 * 1000;
 }
 
@@ -51,6 +51,7 @@ export default function MinhasReservas() {
   const [excluindo, setExcluindo] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [limiteCancelamentoHoras, setLimiteCancelamentoHoras] = useState(2);
+  const [permitirCancelamentoCliente, setPermitirCancelamentoCliente] = useState(true);
   const [agora, setAgora] = useState(Date.now());
 
   async function carregar() {
@@ -58,6 +59,7 @@ export default function MinhasReservas() {
     try {
       const [{ data: reservasCarregadas }, { data: configuracoes }] = await Promise.all([api.get('/agenda/minhas-reservas'), api.get('/configuracoes/geral')]);
       setReservas(reservasCarregadas);
+      setPermitirCancelamentoCliente(configuracoes.permitirCancelamentoCliente !== false);
       setLimiteCancelamentoHoras(configuracoes.limiteCancelamentoHoras === null ? null : Number(configuracoes.limiteCancelamentoHoras || 0));
     } catch (err) {
       setErro('Não foi possível carregar suas reservas.');
@@ -139,7 +141,7 @@ export default function MinhasReservas() {
                 {(r.profissionalNome || r.servico) && <div className="card-reserva-servico">{[r.profissionalNome, r.servico].filter(Boolean).join(' - ')}</div>}
               </div>
               <div className="acoes-reserva">
-                {situacao !== 'passada' && podeCancelarReserva(r, limiteCancelamentoHoras, agora) && <button type="button" className="botao-cancelar-reserva" onClick={() => setReservaParaCancelar(r)}>Cancelar</button>}
+                {situacao !== 'passada' && podeCancelarReserva(r, permitirCancelamentoCliente, limiteCancelamentoHoras, agora) && <button type="button" className="botao-cancelar-reserva" onClick={() => setReservaParaCancelar(r)}>Cancelar</button>}
                 {situacao === 'passada' && <button type="button" className="botao-excluir-reserva" onClick={() => setReservaParaExcluir(r)} aria-label={`Excluir reserva de ${formatarData(r.data)}`} title="Excluir reserva da lista">🗑</button>}
               </div>
             </div>

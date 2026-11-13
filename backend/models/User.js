@@ -4,7 +4,7 @@ const { hashPassword, verifyPassword } = require('../utils/password');
 const userSchema = new mongoose.Schema(
   {
     nome: { type: String, required: true, trim: true },
-    login: { type: String, required: true, unique: true, lowercase: true, trim: true, match: /^[a-z0-9]{6,}$/ },
+    login: { type: String, required: true, unique: true, lowercase: true, trim: true, match: /^[a-z0-9]{3,}$/ },
     telefone: { type: String, trim: true },
     senha: { type: String, required: true, minlength: 6 },
     papel: {

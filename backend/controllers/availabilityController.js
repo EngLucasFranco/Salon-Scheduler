@@ -47,7 +47,7 @@ function datasDoPeriodo(data, periodo) {
 function slotById(agenda, id) { return agenda.slots.find((slot) => String(slot._id) === String(id)); }
 function limparReserva(slot) {
   slot.status = 'disponivel'; slot.cliente = null; slot.clienteNome = ''; slot.servico = ''; slot.observacao = '';
-  slot.servicos = []; slot.duracaoMinutos = 0; slot.reservaId = ''; slot.reservaInicio = false;
+  slot.servicos = []; slot.duracaoMinutos = 0; slot.reservaId = ''; slot.reservaInicio = false; slot.agendaFixa = false;
 }
 function falha(res, erro, mensagem) { console.error(erro); return res.status(500).json({ mensagem }); }
 
@@ -115,10 +115,26 @@ function aplicarReserva(agenda, slot, servicos, cliente) {
 }
 
 async function notificarProfissionalSobreReserva(agenda, slot) {
-  await createNotification({ tipo: 'reserva-profissional', profissionalId: String(agenda.profissionalId), titulo: 'Nova reserva na agenda', mensagem: `${slot.clienteNome} marcou ${slot.servico} para ${agenda.data.split('-').reverse().join('/')} às ${slot.horario}.`, dataReserva: agenda.data, horarioReserva: slot.horario, chave: `reserva-profissional:${agenda.data}:${agenda.profissionalId}:${slot.reservaId || slot._id}` });
+  const identificador = slot.agendaFixa && slot.cliente
+    ? `agenda-fixa:${slot.cliente}:${slot.horario}:${(slot.servicos || []).map((servico) => servico.id).join(',')}`
+    : (slot.reservaId || slot._id);
+  await createNotification({ tipo: 'reserva-profissional', profissionalId: String(agenda.profissionalId), titulo: 'Nova reserva na agenda', mensagem: `${slot.clienteNome} marcou ${slot.servico} para ${agenda.data.split('-').reverse().join('/')} às ${slot.horario}.`, dataReserva: agenda.data, horarioReserva: slot.horario, chave: `reserva-profissional:${agenda.data}:${agenda.profissionalId}:${identificador}` });
+}
+
+async function notificarProfissionalSobreCancelamento(agenda, slot) {
+  await createNotification({
+    tipo: 'reserva-profissional',
+    profissionalId: String(agenda.profissionalId),
+    titulo: 'Reserva cancelada pela cliente',
+    mensagem: `${slot.clienteNome} desmarcou ${slot.servico} de ${agenda.data.split('-').reverse().join('/')} às ${slot.horario}.`,
+    dataReserva: agenda.data,
+    horarioReserva: slot.horario,
+    chave: `cancelamento-cliente:${agenda.data}:${agenda.profissionalId}:${slot.reservaId || slot._id}`,
+  });
 }
 
 function agendaFixaValeNaData(configuracao, data) {
+  if (configuracao.inicioEm && data < configuracao.inicioEm) return false;
   const dataUtc = new Date(`${data}T00:00:00Z`);
   const diaSemana = dataUtc.getUTCDay();
   if (configuracao.frequencia === 'diario') return true;
@@ -127,21 +143,48 @@ function agendaFixaValeNaData(configuracao, data) {
   if (configuracao.frequencia === 'semanal') return true;
   if (configuracao.frequencia !== 'quinzenal') return false;
   const inicio = configuracao.inicioEm ? new Date(`${configuracao.inicioEm}T00:00:00Z`) : dataUtc;
-  return Math.abs(Math.floor((dataUtc - inicio) / 86400000)) % 14 < 7;
+  return Math.floor((dataUtc - inicio) / 86400000) % 14 < 7;
+}
+
+async function aplicarAgendaFixaDoCliente(agenda, cliente, catalogo) {
+  const configuracao = cliente.agendaFixa;
+  if (!agenda.aberta || !configuracao?.ativa || String(configuracao.profissionalId) !== String(agenda.profissionalId) || !agendaFixaValeNaData(configuracao, agenda.data)) return false;
+  if (agenda.slots.some((slot) => slot.agendaFixa && String(slot.cliente) === String(cliente.id))) return false;
+  const servico = catalogo.find((item) => String(item.id) === String(configuracao.servicoId) && item.tipo !== 'produto');
+  const slot = agenda.slots.find((item) => item.horario === configuracao.horario && item.status === 'disponivel');
+  if (!servico || !slot) return false;
+  const slots = aplicarReserva(agenda, slot, [servico], cliente);
+  if (!slots?.length) return false;
+  slots.forEach((item) => { item.agendaFixa = true; });
+  await notificarProfissionalSobreReserva(agenda, slot);
+  return true;
 }
 
 async function aplicarAgendasFixas(agenda) {
   const [usuarios, catalogo] = await Promise.all([listUsers(), listServices()]);
-  for (const cliente of usuarios.filter((usuario) => usuario.papel === 'cliente' && usuario.agendaFixa?.ativa && String(usuario.agendaFixa.profissionalId) === String(agenda.profissionalId))) {
-    const configuracao = cliente.agendaFixa;
-    if (!agendaFixaValeNaData(configuracao, agenda.data)) continue;
-    const servico = catalogo.find((item) => String(item.id) === String(configuracao.servicoId) && item.tipo !== 'produto');
-    const slot = agenda.slots.find((item) => item.horario === configuracao.horario && item.status === 'disponivel');
-    if (!servico || !slot) continue;
-    const slots = aplicarReserva(agenda, slot, [servico], cliente);
-    if (slots) await notificarProfissionalSobreReserva(agenda, slot);
+  for (const cliente of usuarios.filter((usuario) => usuario.papel === 'cliente')) {
+    await aplicarAgendaFixaDoCliente(agenda, cliente, catalogo);
   }
   return saveAgenda(agenda);
+}
+
+async function sincronizarAgendaFixaDaCliente(cliente) {
+  const [agendas, catalogo] = await Promise.all([listAgendas(), listServices()]);
+  for (const agenda of agendas.filter((item) => item.aberta)) {
+    const idsReservasFixas = new Set(agenda.slots
+      .filter((slot) => slot.agendaFixa && String(slot.cliente) === String(cliente.id))
+      .map((slot) => slot.reservaId)
+      .filter(Boolean));
+    let alterada = false;
+    agenda.slots.forEach((slot) => {
+      if ((slot.agendaFixa && String(slot.cliente) === String(cliente.id)) || (slot.reservaId && idsReservasFixas.has(slot.reservaId))) {
+        limparReserva(slot);
+        alterada = true;
+      }
+    });
+    if (await aplicarAgendaFixaDoCliente(agenda, cliente, catalogo)) alterada = true;
+    if (alterada) await saveAgenda(agenda);
+  }
 }
 
 async function notificarAgendaFixaMensalIndisponivel(profissional, dataReferencia) {
@@ -364,9 +407,11 @@ async function cancelarMinhaReserva(req, res) {
     const slot = agenda && slotById(agenda, req.params.slotId);
     if (!slot || !slot.cliente || String(slot.cliente) !== String(req.usuario.id)) return res.status(404).json({ mensagem: 'Reserva não encontrada.' });
     const inicioReserva = new Date(`${agenda.data}T${slot.horario}:00-03:00`);
-    const { limiteCancelamentoHoras } = await getGeneralSettings();
+    const { permitirCancelamentoCliente, limiteCancelamentoHoras } = await getGeneralSettings();
+    if (!permitirCancelamentoCliente) return res.status(400).json({ mensagem: 'O cancelamento pela cliente não está disponível. Entre em contato com a profissional.' });
     if (limiteCancelamentoHoras === null) return res.status(400).json({ mensagem: 'O cancelamento de reservas não está disponível.' });
     if (inicioReserva.getTime() <= Date.now() || inicioReserva.getTime() - Date.now() < limiteCancelamentoHoras * 60 * 60 * 1000) return res.status(400).json({ mensagem: `O cancelamento é permitido até ${limiteCancelamentoHoras} hora(s) antes do horário reservado.` });
+    await notificarProfissionalSobreCancelamento(agenda, slot);
     if (slot.reservaId) agenda.slots.filter((item) => item.reservaId === slot.reservaId).forEach(limparReserva);
     else limparReserva(slot);
     await saveAgenda(agenda);
@@ -374,4 +419,4 @@ async function cancelarMinhaReserva(req, res) {
   } catch (erro) { return falha(res, erro, 'Erro ao cancelar a reserva.'); }
 }
 
-module.exports = { abrirAgenda, fecharAgenda, excluirAgenda, removerSlot, bloquearSlot, cancelarReservaGestor, cancelarServicoReservaGestor, listarAgendaCompleta, listarAgendasAbertas, listarClientes, listarPorData, reservarSlot, marcarHorarioParaCliente, minhasReservas, excluirMinhaReserva, cancelarMinhaReserva };
+module.exports = { abrirAgenda, fecharAgenda, excluirAgenda, removerSlot, bloquearSlot, cancelarReservaGestor, cancelarServicoReservaGestor, listarAgendaCompleta, listarAgendasAbertas, listarClientes, listarPorData, reservarSlot, marcarHorarioParaCliente, minhasReservas, excluirMinhaReserva, cancelarMinhaReserva, sincronizarAgendaFixaDaCliente };

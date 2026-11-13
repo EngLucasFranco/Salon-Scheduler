@@ -1,0 +1,79 @@
+name: SalonScheduler MongoDB keep-alive
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: salonscheduler-mongodb-keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    name: Executar ping autenticado no MongoDB
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      API_URL: ${{ secrets.SALONSCHEDULER_API_URL }}
+      KEEPALIVE_SECRET: ${{ secrets.SALONSCHEDULER_KEEPALIVE_SECRET }}
+    steps:
+      - name: Validar configuração
+        shell: bash
+        run: |
+          if [[ -z "$API_URL" ]]; then
+            echo "::error::O secret SALONSCHEDULER_API_URL não está configurado."
+            exit 1
+          fi
+          if [[ -z "$KEEPALIVE_SECRET" ]]; then
+            echo "::error::O secret SALONSCHEDULER_KEEPALIVE_SECRET não está configurado."
+            exit 1
+          fi
+          if [[ "$API_URL" != https://* ]]; then
+            echo "::error::SALONSCHEDULER_API_URL deve usar HTTPS."
+            exit 1
+          fi
+          if [[ "$API_URL" == */ ]]; then
+            echo "::error::SALONSCHEDULER_API_URL deve ser informada sem barra final."
+            exit 1
+          fi
+
+      - name: Executar keep-alive
+        shell: bash
+        run: |
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+
+          if ! http_status=$(curl --silent --show-error \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --request POST \
+            --header "x-keepalive-key: $KEEPALIVE_SECRET" \
+            --header "accept: application/json" \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            "$API_URL/api/maintenance/database-keepalive"); then
+            echo "::error::Não foi possível acessar o backend dentro do tempo limite."
+            exit 1
+          fi
+
+          if [[ "$http_status" != "200" ]]; then
+            message=$(jq -r '.message // .mensagem // "resposta sem mensagem"' "$response_file" 2>/dev/null || echo "resposta inválida")
+            echo "::error::O backend retornou HTTP $http_status: $message"
+            exit 1
+          fi
+
+          if ! jq -e '
+            .success == true
+            and (.message == "MongoDB keep-alive executado.")
+            and (.checkedAt | type == "string")
+            and (.checkedAt | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"))
+          ' "$response_file" > /dev/null; then
+            echo "::error::O backend respondeu sem uma confirmação válida do ping."
+            exit 1
+          fi
+
+          checked_at=$(jq -r '.checkedAt' "$response_file")
+          echo "Keep-alive confirmado pelo backend em $checked_at."

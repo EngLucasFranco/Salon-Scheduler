@@ -16,7 +16,7 @@ async function registrar(req, res) {
     if (!nome || !login || !senha) {
       return res.status(400).json({ mensagem: 'Nome, usuário e senha são obrigatórios.' });
     }
-    if (!/^[a-z0-9]{6,}$/i.test(login) || senha.length < 6) return res.status(400).json({ mensagem: 'Usuário deve ter ao menos 6 letras ou números, e a senha ao menos 6 caracteres.' });
+    if (!/^[a-z0-9]{3,}$/i.test(login) || senha.length < 6) return res.status(400).json({ mensagem: 'Usuário deve ter ao menos 3 letras ou números, e a senha ao menos 6 caracteres.' });
 
     const usuarioExistente = await findUserByLogin(login);
     if (usuarioExistente) {

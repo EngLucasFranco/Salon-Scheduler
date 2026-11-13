@@ -48,7 +48,7 @@ export default function Registrar() {
 
         <label>
           Usuário
-          <input value={form.login} onChange={(e) => atualizar('login', e.target.value)} minLength={6} pattern="[A-Za-z0-9]+" autoComplete="username" required />
+          <input value={form.login} onChange={(e) => atualizar('login', e.target.value)} minLength={3} pattern="[A-Za-z0-9]+" autoComplete="username" required />
         </label>
 
         <label>

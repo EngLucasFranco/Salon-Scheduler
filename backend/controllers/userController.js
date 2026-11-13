@@ -1,11 +1,12 @@
 const { safeUser, findUserByLogin, createUser, listUsers, updateUser, deleteUser, listProfessionals } = require('../config/store');
+const { sincronizarAgendaFixaDaCliente } = require('./availabilityController');
 
 function validarUsuario({ nome, login, senha, papel, profissionalId }, senhaObrigatoria) {
   if (!nome?.trim() || !login?.trim() || (senhaObrigatoria && !senha)) {
     return 'Nome, usuário e senha são obrigatórios.';
   }
-  if (!/^[a-z0-9]{6,}$/i.test(login) || (senha && senha.length < 6)) {
-    return 'Usuário deve ter ao menos 6 letras ou números, e a senha ao menos 6 caracteres.';
+  if (!/^[a-z0-9]{3,}$/i.test(login) || (senha && senha.length < 6)) {
+    return 'Usuário deve ter ao menos 3 letras ou números, e a senha ao menos 6 caracteres.';
   }
   if (!['cliente', 'gestor', 'colaborador'].includes(papel)) return 'Nível de acesso inválido.';
   if (papel === 'colaborador' && !profissionalId) return 'Selecione o profissional do colaborador.';
@@ -44,6 +45,7 @@ async function criar(req, res) {
     if (await findUserByLogin(login)) return res.status(409).json({ mensagem: 'Este usuário já está em uso.' });
 
     const usuario = await createUser({ nome: nome.trim(), login: login.trim(), telefone, senha, papel, profissionalId, agendaFixa: papel === 'cliente' ? agendaFixa : null });
+    if (papel === 'cliente') await sincronizarAgendaFixaDaCliente(safeUser(usuario));
     return res.status(201).json(safeUser(usuario));
   } catch (erro) {
     if (erro.code === 11000) return res.status(409).json({ mensagem: 'Este usuário já está em uso.' });
@@ -65,6 +67,7 @@ async function atualizar(req, res) {
 
     const usuario = await updateUser(req.params.id, { nome: nome.trim(), login: login.trim(), telefone, senha, papel, profissionalId, agendaFixa: papel === 'cliente' ? agendaFixa : null });
     if (!usuario) return res.status(404).json({ mensagem: 'Usuário não encontrado.' });
+    await sincronizarAgendaFixaDaCliente(safeUser(usuario));
     return res.json(safeUser(usuario));
   } catch (erro) {
     if (erro.code === 11000) return res.status(409).json({ mensagem: 'Este usuário já está em uso.' });

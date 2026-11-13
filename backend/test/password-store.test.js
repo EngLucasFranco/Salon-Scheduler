@@ -34,6 +34,8 @@ test('persistência SQLite e autenticação com migração de senhas', async (t)
   for (const [login, senha] of [['legado01', legacyHash], ['atual001', currentHash], ['texto001', 'Senha antiga em texto!']]) {
     await db.run('INSERT INTO users (nome, login, senha, papel) VALUES (?, ?, ?, ?)', login, login, senha, 'cliente');
   }
+  await db.run('INSERT INTO users (nome, login, senha, papel) VALUES (?, ?, ?, ?)', 'Cliente de desenvolvimento', '010101', await hashPassword('000001'), 'cliente');
+  await db.run('INSERT INTO users (nome, login, senha, papel) VALUES (?, ?, ?, ?)', 'Gestor de desenvolvimento', '020202', await hashPassword('000002'), 'gestor');
   await db.close();
   db = null;
   const store = require('../config/store');
@@ -46,7 +48,13 @@ test('persistência SQLite e autenticação com migração de senhas', async (t)
     const converted = await store.findUserByLogin('texto001');
     assert.match(converted.senha, /^\$argon2id\$/);
     assert.equal(await verifyPassword('Senha antiga em texto!', converted.senha), true);
-    for (const login of ['010101', '020202']) assert.match((await store.findUserByLogin(login)).senha, /^\$argon2id\$/);
+    for (const [login, senha] of [['001', '010101'], ['002', '020202']]) {
+      const desenvolvimento = await store.findUserByLogin(login);
+      assert.match(desenvolvimento.senha, /^\$argon2id\$/);
+      assert.equal(await verifyPassword(senha, desenvolvimento.senha), true);
+    }
+    assert.equal(await store.findUserByLogin('010101'), undefined);
+    assert.equal(await store.findUserByLogin('020202'), undefined);
   });
 
   await t.test('cadastro público grava Argon2id e não devolve o hash', async () => {

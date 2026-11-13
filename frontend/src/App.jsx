@@ -16,6 +16,7 @@ import FluxoCaixa from './pages/FluxoCaixa';
 import Dashboard from './pages/Dashboard';
 import Relatorios from './pages/Relatorios';
 import { LayoutProvider, useLayouts } from './context/LayoutContext';
+import BloqueioAcessoNexus from './components/BloqueioAcessoNexus';
 
 // Decide qual "página inicial" renderizar dentro do Layout, de acordo com o papel
 function PaginaInicial() {
@@ -34,6 +35,7 @@ function AplicarLayout() {
 export default function App() {
   return (
     <AuthProvider>
+      <BloqueioAcessoNexus>
       <LayoutProvider>
       <AplicarLayout />
       <BrowserRouter>
@@ -110,6 +112,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
       </LayoutProvider>
+      </BloqueioAcessoNexus>
     </AuthProvider>
   );
 }
