@@ -10,7 +10,7 @@ Pré-requisito local: Node.js 20 a 24. MongoDB Atlas só é necessário para pro
 2. Instale tudo a partir da raiz: `npm run install:apps && npm install`.
 3. Inicie ambos os serviços: `npm run dev`.
 
-A interface estará em `http://localhost:5173` e a API em
+A interface estará em `http://localhost:5174` e a API em
 `http://localhost:5000/api`. O arquivo `frontend/.env.development` já usa
 essa URL e o backend já aceita essa origem via `CORS_ORIGIN`.
 

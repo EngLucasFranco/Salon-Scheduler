@@ -111,7 +111,23 @@ export default function FluxoCaixa() {
   return <div className="pagina fluxo-caixa">
     <header className="pagina-header"><h1>Fluxo de caixa</h1><p>Registre os recebimentos, pagamentos e demais despesas do caixa.</p></header>
     <AlertaTemporario tipo="sucesso" mensagem={mensagem} /><AlertaTemporario tipo="erro" mensagem={erro} />
-    <div className="caixa-resumo"><div className="caixa-resumo-valores"><span>Movimento de {data.split('-').reverse().join('/')}</span><div><small>Entradas<strong>{moeda(totalDia)}</strong></small><small>Saídas<strong>{moeda(totalSaidas)}</strong></small><small>Saldo<strong>{moeda(saldoCaixa)}</strong></small></div></div><div className="caixa-resumo-acoes"><button type="button" className="botao-historico-fechamento" onClick={() => setHistoricoAberto(true)}>Histórico de Fechamento</button><button type="button" className="botao-registrar-saida" onClick={abrirSaida} disabled={carregando || salvandoSaida}>Registrar Saída</button><button type="button" className="botao-fechar-caixa" onClick={() => setConfirmacaoFechamentoAberta(true)} disabled={carregando || fechandoCaixa}>Fechar Caixa</button></div></div>
+    <div className="caixa-resumo">
+      <div className="caixa-resumo-valores">
+        <span>Movimento de {data.split('-').reverse().join('/')}</span>
+        <div>
+          <small>Saldo<strong>{moeda(saldoCaixa)}</strong></small>
+          <small>Entradas<strong>{moeda(totalDia)}</strong></small>
+          <small>Saídas<strong>{moeda(totalSaidas)}</strong></small>
+        </div>
+      </div>
+      <div className="caixa-resumo-acoes">
+        <button type="button" className="botao-fechar-caixa" onClick={() => setConfirmacaoFechamentoAberta(true)} disabled={carregando || fechandoCaixa}>Fechar Caixa</button>
+        <div className="caixa-resumo-acoes-secundarias">
+          <button type="button" className="botao-registrar-saida" onClick={abrirSaida} disabled={carregando || salvandoSaida}>Registrar Saída</button>
+          <button type="button" className="botao-historico-fechamento" onClick={() => setHistoricoAberto(true)}>Histórico de Fechamento</button>
+        </div>
+      </div>
+    </div>
     <section className="card-cobranca">
       <div className="card-cobranca-cabecalho"><div><h2>Novo Pagamento</h2><p>Selecione uma marcação realizada no dia.</p></div><label>Data<input type="date" value={data} onChange={(e) => { limparCobranca(); setData(e.target.value); }} /></label></div>
       {carregando ? <p>Carregando atendimentos...</p> : <><div className="selecao-atendimento"><label className="campo-cobranca">Atendimento<select value={reservaId} onChange={(e) => mudarAtendimento(e.target.value)}><option value="">Selecione</option><option value="__outro__">Outro</option>{atendimentos.map((item) => { const valor = (item.servicos || []).reduce((soma, servico) => soma + Number(catalogo.find((x) => String(x.id) === String(servico.id))?.valor || 0), 0); return <option key={item.reservaId} value={item.reservaId} disabled={item.cobrado}>{item.horario} — {item.clienteNome} — {item.servico} — {moeda(valor)}{item.cobrado ? ' (já cobrado)' : ''}</option>; })}</select></label><button type="button" onClick={abrirCobranca} disabled={!reservaId}>Ok</button></div>{!atendimentos.length && <div className="aviso-vazio">Não há marcações para cobrança nesta data.</div>}</>}

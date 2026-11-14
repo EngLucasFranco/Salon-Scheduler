@@ -83,8 +83,8 @@ export default function Sidebar() {
   ];
 
   const itensGestor = [
-    { to: '/', label: 'Gerenciar Agenda', icon: iconeGerenciar },
     { to: '/fluxo-de-caixa', label: 'Fluxo de caixa', icon: iconeFluxoCaixa },
+    { to: '/', label: 'Gerenciar Agenda', icon: iconeGerenciar },
     { to: '/dashboard', label: 'Dashboard', icon: iconeDashboard },
     { to: '/catalogo', label: 'Catálogo', icon: iconeCatalogo },
     { to: '/usuarios', label: 'Usuários', icon: iconeUsuarios },

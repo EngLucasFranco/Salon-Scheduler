@@ -20,7 +20,7 @@ npm run dev
 
 Antes de iniciar, defina valores seguros para `JWT_SECRET`,
 `NEXUS_CONFIG_ENCRYPTION_KEY` e `MANAGER_INVITE_CODE` em `backend/.env`. A interface abre em
-`http://localhost:5173` e a API em `http://localhost:5000/api`.
+`http://localhost:5174` e a API em `http://localhost:5000/api`.
 
 No SQLite local, estas contas são criadas automaticamente:
 
