@@ -102,7 +102,9 @@ async function sqlite() {
         CREATE TABLE IF NOT EXISTS cash_outflows (
           id TEXT PRIMARY KEY,
           data TEXT NOT NULL,
+          descricao TEXT NOT NULL DEFAULT '',
           valor REAL NOT NULL,
+          observacao TEXT NOT NULL DEFAULT '',
           meio_pagamento TEXT NOT NULL,
           criado_por TEXT,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -174,6 +176,9 @@ async function sqlite() {
       if (!chargeColumns.some((column) => column.name === 'desconto')) await db.exec('ALTER TABLE charges ADD COLUMN desconto REAL NOT NULL DEFAULT 0');
       if (!chargeColumns.some((column) => column.name === 'acrescimo')) await db.exec('ALTER TABLE charges ADD COLUMN acrescimo REAL NOT NULL DEFAULT 0');
       if (!chargeColumns.some((column) => column.name === 'formas_pagamento')) await db.exec("ALTER TABLE charges ADD COLUMN formas_pagamento TEXT NOT NULL DEFAULT '[]'");
+      const outflowColumns = await db.all('PRAGMA table_info(cash_outflows)');
+      if (!outflowColumns.some((column) => column.name === 'descricao')) await db.exec("ALTER TABLE cash_outflows ADD COLUMN descricao TEXT NOT NULL DEFAULT ''");
+      if (!outflowColumns.some((column) => column.name === 'observacao')) await db.exec("ALTER TABLE cash_outflows ADD COLUMN observacao TEXT NOT NULL DEFAULT ''");
       const closingColumns = await db.all('PRAGMA table_info(cash_closings)');
       if (!closingColumns.some((column) => column.name === 'saidas')) await db.exec("ALTER TABLE cash_closings ADD COLUMN saidas TEXT NOT NULL DEFAULT '[]'");
       if (!closingColumns.some((column) => column.name === 'total_saidas')) await db.exec('ALTER TABLE cash_closings ADD COLUMN total_saidas REAL NOT NULL DEFAULT 0');
@@ -429,7 +434,9 @@ function mapCashOutflow(saida) {
   return {
     id: String(saida._id || saida.id),
     data: saida.data,
+    descricao: saida.descricao || '',
     valor: Number(saida.valor || 0),
+    observacao: saida.observacao || '',
     meioPagamento: saida.meioPagamento || saida.meio_pagamento || '',
     createdAt: saida.createdAt || saida.created_at,
   };
@@ -439,8 +446,8 @@ async function createCashOutflow(saida) {
   if (usingMongo()) return mapCashOutflow(await CashOutflow.create(saida));
   const id = randomUUID();
   await (await sqlite()).run(
-    'INSERT INTO cash_outflows (id, data, valor, meio_pagamento, criado_por) VALUES (?, ?, ?, ?, ?)',
-    id, saida.data, saida.valor, saida.meioPagamento, saida.criadoPor || null
+    'INSERT INTO cash_outflows (id, data, descricao, valor, observacao, meio_pagamento, criado_por) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    id, saida.data, saida.descricao, saida.valor, saida.observacao || '', saida.meioPagamento, saida.criadoPor || null
   );
   return mapCashOutflow(await (await sqlite()).get('SELECT * FROM cash_outflows WHERE id = ?', id));
 }

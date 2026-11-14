@@ -37,17 +37,19 @@ test('saídas reduzem o saldo e são arquivadas no fechamento do caixa', async (
   });
 
   let res = response();
-  await controller.criarSaida({ body: { data: '2026-11-13', valor: 0, meioPagamento: 'PIX' }, usuario: { id: 'gestor' } }, res);
+  await controller.criarSaida({ body: { data: '2026-11-13', descricao: 'Despesa teste', valor: 0, meioPagamento: 'PIX' }, usuario: { id: 'gestor' } }, res);
   assert.equal(res.statusCode, 400);
 
   res = response();
-  await controller.criarSaida({ body: { data: '2026-11-13', valor: 10, meioPagamento: 'Cheque' }, usuario: { id: 'gestor' } }, res);
+  await controller.criarSaida({ body: { data: '2026-11-13', descricao: 'Despesa teste', valor: 10, meioPagamento: 'Cheque' }, usuario: { id: 'gestor' } }, res);
   assert.equal(res.statusCode, 400);
 
   for (const [valor, meioPagamento] of [[50.25, 'Dinheiro'], [30.25, 'Cartão de Débito']]) {
     res = response();
-    await controller.criarSaida({ body: { data: '2026-11-13', valor, meioPagamento }, usuario: { id: 'gestor' } }, res);
+    await controller.criarSaida({ body: { data: '2026-11-13', descricao: 'Material de trabalho', valor, observacao: 'Compra urgente', meioPagamento }, usuario: { id: 'gestor' } }, res);
     assert.equal(res.statusCode, 201);
+    assert.equal(res.body.descricao, 'Material de trabalho');
+    assert.equal(res.body.observacao, 'Compra urgente');
     assert.equal(res.body.meioPagamento, meioPagamento);
   }
 

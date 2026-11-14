@@ -45,11 +45,15 @@ async function listarSaidas(req, res) {
 async function criarSaida(req, res) {
   try {
     const { data, meioPagamento } = req.body;
+    const descricao = String(req.body.descricao || '').trim();
+    const observacao = String(req.body.observacao || '').trim();
     const valor = Number(req.body.valor);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data || '')) return res.status(400).json({ mensagem: 'Informe uma data válida.' });
+    if (!descricao || descricao.length > 120) return res.status(400).json({ mensagem: 'Informe uma descrição de até 120 caracteres.' });
     if (!Number.isFinite(valor) || valor <= 0) return res.status(400).json({ mensagem: 'Informe um valor de saída maior que zero.' });
+    if (observacao.length > 500) return res.status(400).json({ mensagem: 'A observação deve ter até 500 caracteres.' });
     if (!MEIOS_SAIDA.includes(meioPagamento)) return res.status(400).json({ mensagem: 'Selecione um meio de pagamento válido.' });
-    return res.status(201).json(await createCashOutflow({ data, valor, meioPagamento, criadoPor: req.usuario.id }));
+    return res.status(201).json(await createCashOutflow({ data, descricao, valor, observacao, meioPagamento, criadoPor: req.usuario.id }));
   } catch (erro) { return erroServidor(res, erro, 'Erro ao registrar a saída do caixa.'); }
 }
 
