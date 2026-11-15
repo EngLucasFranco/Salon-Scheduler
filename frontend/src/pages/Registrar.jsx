@@ -20,7 +20,7 @@ export default function Registrar() {
     setEnviando(true);
     try {
       await registrar(form);
-      navigate('/');
+      navigate('/login', { replace: true });
     } catch (err) {
       setErro(err.response?.data?.mensagem || 'Não foi possível cadastrar.');
     } finally {

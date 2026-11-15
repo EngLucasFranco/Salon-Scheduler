@@ -1,29 +1,65 @@
-const { getNexusAuthCredentials } = require('../config/store');
 const { createHash } = require('node:crypto');
+const { getNexusAuthCredentials } = require('../config/store');
 
-const SUCCESS_CACHE_MS = 3 * 60 * 1000;
-const DENIAL_CACHE_MS = 15 * 1000;
 const DEFAULT_TIMEOUT_MS = 10 * 1000;
-
-let cache = null;
+const validationsInFlight = new Map();
 
 function technicalFailure(reason, message) {
   return { online: false, reason, message, technicalFailure: true };
 }
 
-async function requestNexusValidation(config, { fetchImpl = global.fetch, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+function normalizeAuthorizedResponse(data, now) {
+  const token = typeof data.token === 'string' ? data.token.trim() : '';
+  const tokenExpiresAt = typeof data.tokenExpiresAt === 'string' ? data.tokenExpiresAt : '';
+  const expirationTime = Date.parse(tokenExpiresAt);
+
+  if (!token || !Number.isFinite(expirationTime) || expirationTime <= now) {
+    return technicalFailure('INVALID_SESSION', 'O NexusControl devolveu uma sessão inválida.');
+  }
+
+  return {
+    online: true,
+    token,
+    tokenExpiresAt: new Date(expirationTime).toISOString(),
+    tokenValidityHours: Number.isFinite(Number(data.tokenValidityHours))
+      ? Number(data.tokenValidityHours)
+      : null,
+    permissions: Array.isArray(data.permissions)
+      ? data.permissions.filter((permission) => typeof permission === 'string')
+      : [],
+    user: data.user && typeof data.user === 'object' ? data.user : null,
+    system: typeof data.system === 'string' ? data.system : null,
+    tokenType: typeof data.tokenType === 'string' ? data.tokenType : 'Bearer',
+    licenseStatus: typeof data.licenseStatus === 'string' ? data.licenseStatus : null,
+    expiresAt: data.expiresAt ?? null,
+    technicalFailure: false,
+  };
+}
+
+async function requestNexusValidation(
+  config,
+  credentials = {},
+  { fetchImpl = global.fetch, timeoutMs = DEFAULT_TIMEOUT_MS, now = Date.now() } = {}
+) {
   if (typeof fetchImpl !== 'function') {
     return technicalFailure('NETWORK_ERROR', 'Não foi possível consultar o NexusControl.');
   }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const body = {
+    systemKey: config.systemKey,
+    apiKey: config.apiKey,
+    ...(credentials.cpf ? { cpf: credentials.cpf } : {}),
+    ...(credentials.name ? { name: credentials.name } : {}),
+    ...(credentials.password ? { password: credentials.password } : {}),
+  };
 
   try {
     const response = await fetchImpl(`${config.baseUrl}/api/validate/system`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ systemKey: config.systemKey, apiKey: config.apiKey }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
 
@@ -38,37 +74,13 @@ async function requestNexusValidation(config, { fetchImpl = global.fetch, timeou
       return technicalFailure('INVALID_RESPONSE', 'O NexusControl devolveu uma resposta inválida.');
     }
 
-    const licenseStatus = typeof data.licenseStatus === 'string'
-      ? data.licenseStatus.trim().toUpperCase()
-      : '';
-
-    if (data.online === true && licenseStatus === 'ATIVA') {
-      return {
-        online: true,
-        licenseStatus,
-        expiresAt: data.expiresAt,
-        permissions: Array.isArray(data.permissions) ? data.permissions : [],
-      };
-    }
-
-    // Defesa contra respostas inconsistentes: mesmo que online venha true,
-    // nenhum estado diferente de ATIVA pode liberar o programa.
-    if (data.online === true) {
-      const knownDeniedStatus = ['BLOQUEADA', 'EXPIRADA', 'SUSPENSA'].includes(licenseStatus);
-      return {
-        online: false,
-        reason: knownDeniedStatus ? `LICENSE_STATUS_${licenseStatus}` : 'INVALID_LICENSE_STATUS',
-        message: 'A licença do programa não autoriza operações online.',
-        ...(licenseStatus ? { licenseStatus } : {}),
-        technicalFailure: !knownDeniedStatus,
-      };
-    }
+    if (data.online === true) return normalizeAuthorizedResponse(data, now);
 
     return {
       online: false,
       reason: data.reason || 'NOT_AUTHORIZED',
-      message: data.message || 'A licença do programa não autoriza operações online.',
-      ...(licenseStatus ? { licenseStatus } : {}),
+      message: data.message || 'A licença do programa não autoriza o acesso.',
+      ...(typeof data.licenseStatus === 'string' ? { licenseStatus: data.licenseStatus } : {}),
       technicalFailure: false,
     };
   } catch (error) {
@@ -82,38 +94,36 @@ async function requestNexusValidation(config, { fetchImpl = global.fetch, timeou
   }
 }
 
-function credentialsIdentity(config) {
+function validationIdentity(config, credentials) {
   return createHash('sha256')
     .update(config.baseUrl)
     .update('\u0000')
     .update(config.systemKey)
     .update('\u0000')
     .update(config.apiKey)
+    .update('\u0000')
+    .update(credentials.cpf || '')
+    .update('\u0000')
+    .update(credentials.name || '')
+    .update('\u0000')
+    .update(credentials.password || '')
     .digest('hex');
 }
 
-async function validateNexusAccess({ now = Date.now(), fetchImpl = global.fetch, timeoutMs } = {}) {
-  const config = await getNexusAuthCredentials();
-
-  // Mantém possível o primeiro acesso do gestor para cadastrar a integração.
-  if (!config) return { configured: false, online: true };
-
-  const identity = credentialsIdentity(config);
-  if (cache && cache.identity === identity && cache.expiresAt > now) {
-    return { configured: true, ...cache.result };
+async function validateAtLogin(credentials, options = {}) {
+  const config = options.config || await getNexusAuthCredentials();
+  if (!config) {
+    return technicalFailure('NOT_CONFIGURED', 'A integração com o NexusControl não está configurada.');
   }
 
-  const result = await requestNexusValidation(config, { fetchImpl, timeoutMs });
-  cache = {
-    identity,
-    result,
-    expiresAt: now + (result.online ? SUCCESS_CACHE_MS : DENIAL_CACHE_MS),
-  };
-  return { configured: true, ...result };
+  const identity = validationIdentity(config, credentials);
+  const existing = validationsInFlight.get(identity);
+  if (existing) return existing;
+
+  const validation = requestNexusValidation(config, credentials, options)
+    .finally(() => validationsInFlight.delete(identity));
+  validationsInFlight.set(identity, validation);
+  return validation;
 }
 
-function clearNexusValidationCache() {
-  cache = null;
-}
-
-module.exports = { requestNexusValidation, validateNexusAccess, clearNexusValidationCache };
+module.exports = { requestNexusValidation, validateAtLogin };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AlertaTemporario from '../components/AlertaTemporario';
@@ -13,6 +13,7 @@ export default function Login() {
   const [enviando, setEnviando] = useState(false);
   const [nomeEstabelecimento, setNomeEstabelecimento] = useState('Salon Scheduler');
   const [logomarca, setLogomarca] = useState('');
+  const envioEmAndamento = useRef(false);
 
   useEffect(() => {
     api.get('/configuracoes/geral').then(({ data }) => { setNomeEstabelecimento(data.nomeEstabelecimento?.trim() || 'Salon Scheduler'); setLogomarca(data.logomarca || ''); }).catch(() => setNomeEstabelecimento('Salon Scheduler'));
@@ -20,6 +21,8 @@ export default function Login() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (envioEmAndamento.current) return;
+    envioEmAndamento.current = true;
     setErro('');
     setEnviando(true);
     try {
@@ -28,6 +31,7 @@ export default function Login() {
     } catch (err) {
       setErro(err.response?.data?.mensagem || 'Não foi possível entrar.');
     } finally {
+      envioEmAndamento.current = false;
       setEnviando(false);
     }
   }

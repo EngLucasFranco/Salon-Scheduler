@@ -6,11 +6,27 @@ const path = require('node:path');
 const { open } = require('sqlite');
 const sqlite3 = require('sqlite3');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const { hashPassword, verifyPassword } = require('../utils/password');
 
 function response() {
   return { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+}
+
+async function authorizeLogin(auth, req, res) {
+  return auth.loginWithDependencies(req, res, {
+    validateNexusAtLogin: async () => ({
+      online: true,
+      token: 'token-nexus-teste',
+      tokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      tokenValidityHours: 1,
+      permissions: [],
+      user: null,
+      system: 'Teste',
+      tokenType: 'Bearer',
+      licenseStatus: 'ATIVA',
+      expiresAt: null,
+    }),
+  });
 }
 
 test('persistência SQLite e autenticação com migração de senhas', async (t) => {
@@ -62,7 +78,7 @@ test('persistência SQLite e autenticação com migração de senhas', async (t)
     await auth.registrar({ body: { nome: 'Cadastro teste', login: 'novo0001', senha: 'Senha nova!' } }, res);
     assert.equal(res.statusCode, 201);
     assert.equal(Object.hasOwn(res.body.usuario, 'senha'), false);
-    assert.equal(Object.hasOwn(jwt.decode(res.body.token), 'exp'), false);
+    assert.equal(Object.hasOwn(res.body, 'token'), false);
     const user = await store.findUserByLogin('novo0001');
     assert.match(user.senha, /^\$argon2id\$/);
     assert.equal(await verifyPassword('Senha nova!', user.senha), true);
@@ -70,13 +86,13 @@ test('persistência SQLite e autenticação com migração de senhas', async (t)
 
   await t.test('login inválido não altera bcrypt; login válido migra e mantém o perfil', async () => {
     let res = response();
-    await auth.login({ body: { login: 'legado01', senha: 'incorreta' } }, res);
+    await authorizeLogin(auth, { body: { login: 'legado01', senha: 'incorreta' } }, res);
     assert.equal(res.statusCode, 401);
     assert.equal(res.body.mensagem, 'Usuário ou senha inválidos.');
     assert.equal((await store.findUserByLogin('legado01')).senha, legacyHash);
     const before = store.safeUser(await store.findUserByLogin('legado01'));
     res = response();
-    await auth.login({ body: { login: 'legado01', senha: 'Senha antiga!' } }, res);
+    await authorizeLogin(auth, { body: { login: 'legado01', senha: 'Senha antiga!' } }, res);
     assert.equal(res.statusCode, 200);
     assert.ok(res.body.token);
     assert.equal(Object.hasOwn(res.body.usuario, 'senha'), false);
@@ -84,7 +100,7 @@ test('persistência SQLite e autenticação com migração de senhas', async (t)
     assert.match(user.senha, /^\$argon2id\$/);
     assert.equal(await verifyPassword('Senha antiga!', user.senha), true);
     assert.deepEqual(store.safeUser(user), before);
-    await auth.login({ body: { login: 'legado01', senha: 'Senha antiga!' } }, response());
+    await authorizeLogin(auth, { body: { login: 'legado01', senha: 'Senha antiga!' } }, response());
     assert.equal((await store.findUserByLogin('legado01')).senha, user.senha);
   });
 

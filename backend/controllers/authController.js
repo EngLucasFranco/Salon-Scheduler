@@ -1,10 +1,17 @@
 const jwt = require('jsonwebtoken');
 const { verifyPassword, needsPasswordRehash } = require('../utils/password');
 const { safeUser, findUserByLogin, findUserById, createUser, upgradeUserPassword } = require('../config/store');
+const { validateAtLogin } = require('../utils/nexusValidation');
 
-function gerarToken(usuario) {
-  // A validade da sessão é controlada pelo sessionStorage no navegador.
-  return jwt.sign({ id: usuario.id, papel: usuario.papel }, process.env.JWT_SECRET);
+function gerarToken(usuario, tokenExpiresAt) {
+  return jwt.sign(
+    {
+      id: usuario.id,
+      papel: usuario.papel,
+      exp: Math.floor(Date.parse(tokenExpiresAt) / 1000),
+    },
+    process.env.JWT_SECRET
+  );
 }
 
 // POST /api/auth/registrar
@@ -24,9 +31,7 @@ async function registrar(req, res) {
     }
 
     const usuario = await createUser({ nome, login, telefone, senha, papel: 'cliente' });
-    const token = gerarToken(usuario);
-
-    return res.status(201).json({ usuario: safeUser(usuario), token });
+    return res.status(201).json({ usuario: safeUser(usuario) });
   } catch (erro) {
     if (erro.code === 11000 || /UNIQUE constraint failed/i.test(erro.message || '')) return res.status(409).json({ mensagem: 'Este usuário está indisponível.' });
     console.error(erro);
@@ -35,7 +40,7 @@ async function registrar(req, res) {
 }
 
 // POST /api/auth/login
-async function login(req, res) {
+async function loginWithDependencies(req, res, { validateNexusAtLogin = validateAtLogin } = {}) {
   try {
     const { login, senha } = req.body;
 
@@ -56,12 +61,44 @@ async function login(req, res) {
       }
     }
 
-    const token = gerarToken(usuario);
-    return res.json({ usuario: safeUser(usuario), token });
+    const nexusSession = await validateNexusAtLogin({
+      cpf: login,
+      name: usuario.nome,
+      password: senha,
+    });
+
+    if (nexusSession.online !== true) {
+      return res.status(nexusSession.technicalFailure ? 503 : 403).json({
+        mensagem: nexusSession.message || 'Acesso negado pelo NexusControl.',
+        reason: nexusSession.reason,
+        online: false,
+      });
+    }
+
+    const token = gerarToken(usuario, nexusSession.tokenExpiresAt);
+    return res.json({
+      usuario: safeUser(usuario),
+      token,
+      nexusSession: {
+        token: nexusSession.token,
+        tokenExpiresAt: nexusSession.tokenExpiresAt,
+        tokenValidityHours: nexusSession.tokenValidityHours,
+        permissions: nexusSession.permissions,
+        user: nexusSession.user,
+        system: nexusSession.system,
+        tokenType: nexusSession.tokenType,
+        licenseStatus: nexusSession.licenseStatus,
+        expiresAt: nexusSession.expiresAt,
+      },
+    });
   } catch (erro) {
-    console.error(erro);
+    console.error('Falha interna ao fazer login.');
     return res.status(500).json({ mensagem: 'Erro ao fazer login.' });
   }
+}
+
+async function login(req, res) {
+  return loginWithDependencies(req, res);
 }
 
 // GET /api/auth/me
@@ -69,4 +106,4 @@ async function me(req, res) {
   return res.json({ usuario: req.usuario });
 }
 
-module.exports = { registrar, login, me };
+module.exports = { registrar, login, loginWithDependencies, me };
